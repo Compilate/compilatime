@@ -1,0 +1,731 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id                    String                 @id @default(cuid())
+  name                  String
+  slug                  String                 @unique
+  email                 String                 @unique
+  phone                 String?
+  address               String?
+  logo                  String?
+  timezone              String                 @default("Europe/Madrid")
+  locale                String                 @default("es")
+  settings              Json?
+  active                Boolean                @default(true)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  currentSubscriptionId String?
+  isActive              Boolean                @default(true)
+  suspensionReason      String?
+  geofenceRadius        Float?                 @default(100)
+  latitude              Float?
+  longitude             Float?
+  requireGeolocation    Boolean                @default(false)
+  // Configuración de cierre automático
+  autoPunchoutEnabled  Boolean                @default(false)
+  autoPunchoutMaxMinutes Int                    @default(480) // 8 horas = 480 minutos
+  autoPunchoutMarginBefore Int                   @default(15)  // 15 minutos antes del fin de turno
+  autoPunchoutMarginAfter  Int                  @default(30)  // 30 minutos después del fin de turno
+  // Configuración de acceso a zona personal de empleados
+  enableEmployeePortal Boolean                 @default(true)
+  absenceRequests       AbsenceRequest[]
+  absences              Absence[]
+  currentSubscription   Subscription?          @relation("CurrentSubscription", fields: [currentSubscriptionId], references: [id])
+  companyHolidays       CompanyHoliday[]
+  companyUsers          CompanyUser[]
+  employeeCompanies     EmployeeCompany[]
+  notificationTemplates NotificationTemplate[]
+  notifications         Notification[]
+  overtimeRules         OvertimeRule[]
+  reports               Report[]
+  schedules             Schedule[]
+  subscriptions         Subscription[]
+  timeEntries           TimeEntry[]
+  vacationBalances      VacationBalance[]
+  vacationPolicies      VacationPolicy[]
+  weeklySchedules       WeeklySchedule[]
+  weeklyTemplates       WeeklyTemplate[]
+  workDays              WorkDay[]
+  breakTypes            BreakType[]
+
+  @@map("companies")
+}
+
+model CompanyUser {
+  id                   String             @id @default(cuid())
+  companyId            String
+  name                 String
+  email                String
+  passwordHash         String
+  role                 UserRole           @default(MANAGER)
+  avatar               String?
+  lastLoginAt          DateTime?
+  active               Boolean            @default(true)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  roleId               String?
+  company              Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  roleModel            Role?              @relation(fields: [roleId], references: [id])
+  createdNotifications Notification[]
+  createdReports       Report[]
+  timeEntryEditLogs    TimeEntryEditLog[]
+
+  @@unique([companyId, email])
+  @@map("company_users")
+}
+
+model Role {
+  id           String        @id @default(cuid())
+  name         String        @unique
+  description  String?
+  companyUsers CompanyUser[]
+  permissions  Permission[]  @relation("PermissionToRole")
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  description String?
+  resource    String
+  action      String
+  roles       Role[]  @relation("PermissionToRole")
+
+  @@unique([resource, action])
+  @@map("permissions")
+}
+
+model Employee {
+  id                          String                       @id @default(cuid())
+  dni                         String                       @unique
+  name                        String
+  surname                     String?
+  email                       String?                      @unique
+  phone                       String?
+  pin                         String
+  passwordHash                String?
+  avatar                      String?
+  department                  String?
+  position                    String?
+  contractType                String?
+  hireDate                    DateTime?
+  salary                      Float?
+  active                      Boolean                      @default(true)
+  createdAt                   DateTime                     @default(now())
+  updatedAt                   DateTime                     @updatedAt
+  absenceRequests             AbsenceRequest[]
+  absences                    Absence[]
+  employeeCompanies           EmployeeCompany[]
+  employeeSchedules           EmployeeSchedule[]
+  notifications               Notification[]
+  timeEntries                 TimeEntry[]
+  userNotificationPreferences UserNotificationPreference[]
+  vacationBalances            VacationBalance[]
+  weeklySchedules             WeeklySchedule[]
+  workDays                    WorkDay[]
+
+  @@map("employees")
+}
+
+model EmployeeCompany {
+  id           String    @id @default(cuid())
+  employeeId   String
+  companyId    String
+  employeeCode String?
+  department   String?
+  position     String?
+  salary       Float?
+  hireDate     DateTime?
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  company      Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee     Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, companyId])
+  @@map("employee_companies")
+}
+
+model Schedule {
+  id                String             @id @default(cuid())
+  companyId         String
+  name              String
+  startTime         String
+  endTime           String
+  breakTime         Int?
+  flexible          Boolean            @default(false)
+  active            Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  color             String?
+  employeeSchedules EmployeeSchedule[]
+  scheduleDays      ScheduleDay[]
+  company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  weeklySchedules   WeeklySchedule[]
+
+  @@unique([companyId, name])
+  @@map("schedules")
+}
+
+model ScheduleDay {
+  id         String   @id @default(cuid())
+  scheduleId String
+  dayOfWeek  Int
+  createdAt  DateTime @default(now())
+  schedule   Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduleId, dayOfWeek])
+  @@map("schedule_days")
+}
+
+model EmployeeSchedule {
+  id         String    @id @default(cuid())
+  employeeId String
+  scheduleId String
+  startDate  DateTime
+  endDate    DateTime?
+  active     Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  schedule   Schedule  @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, scheduleId])
+  @@map("employee_schedules")
+}
+
+model WeeklySchedule {
+  id         String    @id @default(cuid())
+  companyId  String
+  employeeId String
+  weekStart  DateTime  @db.Date
+  dayOfWeek  Int
+  scheduleId String?
+  notes      String?
+  active     Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  schedule   Schedule? @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@map("weekly_schedules")
+}
+
+model WeeklyTemplate {
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  description String?
+  weekData    Json
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, name])
+  @@map("weekly_templates")
+}
+
+model TimeEntry {
+  id                String             @id @default(cuid())
+  companyId         String
+  employeeId        String
+  type              TimeEntryType
+  timestamp         DateTime
+  source            TimeEntrySource    @default(WEB)
+  location          String?
+  deviceInfo        String?
+  notes             String?
+  createdByEmployee Boolean            @default(true)
+  approvedBy        String?
+  approvedAt        DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  geofenceValid     Boolean?
+  isRemoteWork      Boolean            @default(false)
+  latitude          Float?
+  longitude         Float?
+  breakTypeId       String?
+  breakReason       String?
+  company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee          Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  editLogs          TimeEntryEditLog[]
+  breakType         BreakType?         @relation(fields: [breakTypeId], references: [id])
+
+  @@map("time_entries")
+}
+
+model BreakType {
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  description String?
+  color       String   @default("#F59E0B")
+  active      Boolean  @default(true)
+  requiresReason Boolean @default(false)
+  maxMinutes  Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  timeEntries TimeEntry[]
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, name])
+  @@map("break_types")
+}
+
+model TimeEntryEditLog {
+  id            String      @id @default(cuid())
+  timeEntryId   String
+  companyUserId String
+  oldTimestamp  DateTime
+  newTimestamp  DateTime
+  reason        String
+  createdAt     DateTime    @default(now())
+  companyUser   CompanyUser @relation(fields: [companyUserId], references: [id], onDelete: Cascade)
+  timeEntry     TimeEntry   @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
+
+  @@map("time_entry_edit_logs")
+}
+
+model WorkDay {
+  id              String        @id @default(cuid())
+  companyId       String
+  employeeId      String
+  date            DateTime      @db.Date
+  startTime       DateTime?
+  endTime         DateTime?
+  breakMinutes    Int           @default(0)
+  workedMinutes   Int           @default(0)
+  overtimeMinutes Int           @default(0)
+  status          WorkDayStatus @default(PENDING)
+  approvedBy      String?
+  approvedAt      DateTime?
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  company         Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee        Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, employeeId, date])
+  @@map("work_days")
+}
+
+model OvertimeRule {
+  id          String          @id @default(cuid())
+  companyId   String
+  name        String
+  description String?
+  dayType     OvertimeDayType
+  minMinutes  Int
+  multiplier  Float
+  active      Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  company     Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("overtime_rules")
+}
+
+model Absence {
+  id               String           @id @default(cuid())
+  companyId        String
+  employeeId       String
+  type             AbsenceType
+  startDate        DateTime         @db.Date
+  endDate          DateTime         @db.Date
+  days             Float
+  reason           String?
+  status           AbsenceStatus    @default(PENDING)
+  approvedBy       String?
+  approvedAt       DateTime?
+  notes            String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  halfDay          Boolean          @default(false)
+  startHalfDay     String?
+  endHalfDay       String?
+  requestedById    String?
+  rejectionReason  String?
+  emergencyContact String?
+  backupEmployeeId String?
+  calendarEventId  String?
+  attachments      Json?
+  absenceComments  AbsenceComment[]
+  absenceRequests  AbsenceRequest[]
+  company          Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee         Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("absences")
+}
+
+model VacationPolicy {
+  id                   String            @id @default(cuid())
+  companyId            String
+  name                 String
+  description          String?
+  yearlyDays           Int               @default(22)
+  probationDays        Int               @default(0)
+  maxCarryOverDays     Int               @default(5)
+  minNoticeDays        Int               @default(7)
+  requiresApproval     Boolean           @default(true)
+  allowHalfDays        Boolean           @default(true)
+  restrictByDepartment Boolean           @default(false)
+  active               Boolean           @default(true)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  vacationBalances     VacationBalance[]
+  company              Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, name])
+  @@map("vacation_policies")
+}
+
+model VacationBalance {
+  id              String         @id @default(cuid())
+  companyId       String
+  employeeId      String
+  policyId        String
+  year            Int
+  totalDays       Float          @default(0)
+  usedDays        Float          @default(0)
+  pendingDays     Float          @default(0)
+  carriedOverDays Float          @default(0)
+  adjustedDays    Float          @default(0)
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  company         Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee        Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  policy          VacationPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, employeeId, year])
+  @@map("vacation_balances")
+}
+
+model AbsenceRequest {
+  id               String        @id @default(cuid())
+  companyId        String
+  employeeId       String
+  absenceId        String?
+  startDate        DateTime      @db.Date
+  endDate          DateTime      @db.Date
+  days             Float
+  reason           String?
+  requestedById    String?
+  approvedBy       String?
+  approvedAt       DateTime?
+  rejectionReason  String?
+  emergencyContact String?
+  backupEmployeeId String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  type             AbsenceType
+  status           AbsenceStatus @default(PENDING)
+  attachments      Json?
+  absence          Absence?      @relation(fields: [absenceId], references: [id], onDelete: Cascade)
+  company          Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee         Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("absence_requests")
+}
+
+model AbsenceComment {
+  id         String   @id @default(cuid())
+  absenceId  String
+  authorId   String
+  authorType String
+  comment    String
+  isInternal Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  absence    Absence  @relation(fields: [absenceId], references: [id], onDelete: Cascade)
+
+  @@map("absence_comments")
+}
+
+model CompanyHoliday {
+  id          String      @id @default(cuid())
+  companyId   String
+  name        String
+  date        DateTime    @db.Date
+  recurring   Boolean     @default(false)
+  active      Boolean     @default(true)
+  description String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  type        HolidayType @default(PUBLIC)
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, date])
+  @@map("company_holidays")
+}
+
+model Notification {
+  id             String              @id @default(cuid())
+  companyId      String
+  title          String
+  message        String
+  type           NotificationType
+  channel        NotificationChannel @default(EMAIL)
+  recipientId    String?
+  recipientEmail String?
+  status         NotificationStatus  @default(PENDING)
+  sentAt         DateTime?
+  readAt         DateTime?
+  data           Json?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  createdById    String?
+  company        Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy      CompanyUser?        @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  employee       Employee?           @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model NotificationTemplate {
+  id        String              @id @default(cuid())
+  companyId String
+  name      String
+  type      NotificationType
+  subject   String
+  template  String
+  channel   NotificationChannel @default(EMAIL)
+  active    Boolean             @default(true)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+  company   Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, name])
+  @@map("notification_templates")
+}
+
+model UserNotificationPreference {
+  id               String              @id @default(cuid())
+  employeeId       String
+  notificationType NotificationType
+  enabled          Boolean             @default(true)
+  channel          NotificationChannel @default(EMAIL)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  employee         Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, notificationType])
+  @@map("user_notification_preferences")
+}
+
+model Report {
+  id          String      @id @default(cuid())
+  companyId   String
+  name        String
+  description String?
+  type        ReportType
+  config      Json
+  schedule    Json?
+  active      Boolean     @default(true)
+  createdBy   String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  creator     CompanyUser @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@map("reports")
+}
+
+model Superadmin {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  lastLoginAt  DateTime?
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("superadmins")
+}
+
+model Plan {
+  id                     String         @id @default(cuid())
+  name                   String         @unique
+  description            String?
+  priceMonthly           Float
+  priceYearly            Float
+  maxEmployees           Int
+  maxTimeEntriesPerMonth Int
+  features               Json
+  active                 Boolean        @default(true)
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+  durationMonths         Int            @default(1)
+  subscriptions          Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id                  String             @id @default(cuid())
+  companyId           String
+  planId              String
+  startDate           DateTime           @db.Date
+  endDate             DateTime           @db.Date
+  renewsAutomatically Boolean            @default(true)
+  status              SubscriptionStatus @default(ACTIVE)
+  paymentMethod       PaymentMethod      @default(STRIPE)
+  trialEndsAt         DateTime?          @db.Date
+  cancelledAt         DateTime?
+  cancellationReason  String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  currentCompanies    Company[]          @relation("CurrentSubscription")
+  payments            Payment[]
+  company             Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  plan                Plan               @relation(fields: [planId], references: [id])
+
+  @@map("subscriptions")
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  subscriptionId  String
+  amount          Float
+  currency        String        @default("EUR")
+  paidAt          DateTime?     @db.Date
+  status          PaymentStatus @default(PENDING)
+  method          PaymentMethod @default(STRIPE)
+  stripePaymentId String?
+  invoiceUrl      String?
+  failureReason   String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  subscription    Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  MANAGER
+  SUPERVISOR
+  HR
+}
+
+enum TimeEntryType {
+  IN
+  OUT
+  BREAK
+  RESUME
+}
+
+enum TimeEntrySource {
+  WEB
+  MOBILE
+  ADMIN
+  API
+  KIOSK
+}
+
+enum WorkDayStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PROCESSED
+}
+
+enum OvertimeDayType {
+  WEEKDAY
+  WEEKEND
+  HOLIDAY
+  SPECIAL
+}
+
+enum AbsenceType {
+  VACATION
+  SICK_LEAVE
+  PERSONAL
+  MATERNITY
+  PATERNITY
+  BEREAVEMENT
+  UNPAID
+  TRAINING
+}
+
+enum AbsenceStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum NotificationType {
+  TIME_ENTRY
+  OVERTIME_ALERT
+  ABSENCE_REQUEST
+  SCHEDULE_CHANGE
+  REPORT_READY
+  SYSTEM_ALERT
+  BIRTHDAY
+  ANNIVERSARY
+}
+
+enum NotificationChannel {
+  EMAIL
+  PUSH
+  SMS
+  IN_APP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum ReportType {
+  WORK_HOURS
+  OVERTIME
+  ATTENDANCE
+  ABSENCE
+  SCHEDULE
+  CUSTOM
+}
+
+enum HolidayType {
+  PUBLIC
+  COMPANY
+  RELIGIOUS
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PENDING_PAYMENT
+  CANCELLED
+  EXPIRED
+  TRIAL
+}
+
+enum PaymentMethod {
+  STRIPE
+  MANUAL
+  TRANSFER
+  PAYPAL
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}

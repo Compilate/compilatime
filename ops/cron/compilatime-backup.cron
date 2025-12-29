@@ -1,0 +1,69 @@
+# ============================================
+# CRON JOB PARA BACKUPS AUTOMÁTICOS
+# ============================================
+#
+# Este archivo configura backups automáticos diarios de Compilatime.
+#
+# Para instalar este cron job:
+#   1. Copia este archivo a /etc/cron.d/compilatime-backup
+#   2. Asegúrate de que el archivo tenga permisos 644
+#   3. Asegúrate de que el usuario especificado tenga permisos para ejecutar los scripts
+#
+# O usa crontab -e y añade las líneas manualmente.
+#
+# Formato de cron:
+#   * * * * * usuario comando
+#   │ │ │ │ │
+#   │ │ │ │ └─── Día de la semana (0-7, 0 y 7 = domingo)
+#   │ │ │ └───── Mes (1-12)
+#   │ │ └─────── Día del mes (1-31)
+#   │ └───────── Hora (0-23)
+#   └─────────── Minuto (0-59)
+#
+# ============================================
+
+# Backup diario a las 2:00 AM (todos los días)
+# Ejecuta backup completo (DB + config + release)
+0 2 * * * deploy /opt/compilatime/ops/backup.sh all >> /opt/compilatime/logs/cron_backup.log 2>&1
+
+# Backup de base de datos cada 6 horas (a las 2:00, 8:00, 14:00, 20:00)
+# Esto crea backups más frecuentes de la DB
+0 2,8,14,20 * * * deploy /opt/compilatime/ops/backup.sh db >> /opt/compilatime/logs/cron_backup_db.log 2>&1
+
+# Backup de configuración cada día a las 3:00 AM
+0 3 * * * deploy /opt/compilatime/ops/backup.sh config >> /opt/compilatime/logs/cron_backup_config.log 2>&1
+
+# Limpieza de logs antiguos cada domingo a las 4:00 AM
+# Elimina logs con más de 30 días
+0 4 * * 0 deploy find /opt/compilatime/logs -name "*.log" -mtime +30 -delete >> /opt/compilatime/logs/cron_cleanup.log 2>&1
+
+# ============================================
+# NOTAS:
+# ============================================
+#
+# 1. Cambia 'deploy' por el usuario que ejecuta los scripts
+# 2. Asegúrate de que el usuario tenga permisos para:
+#    - Ejecutar /opt/compilatime/ops/backup.sh
+#    - Escribir en /opt/compilatime/logs/
+#    - Acceder a la base de datos PostgreSQL
+# 3. Ajusta los horarios según tus necesidades
+# 4. Los logs de cron se guardan en /opt/compilatime/logs/
+#
+# ============================================
+# INSTALACIÓN:
+# ============================================
+#
+# Opción 1: Copiar a /etc/cron.d/
+#   sudo cp ops/cron/compilatime-backup.cron /etc/cron.d/compilatime-backup
+#   sudo chmod 644 /etc/cron.d/compilatime-backup
+#   sudo service cron restart
+#
+# Opción 2: Usar crontab del usuario
+#   crontab -e -u deploy
+#   # Copiar las líneas de este archivo (sin el usuario)
+#   # Guardar y salir
+#
+# Opción 3: Usar systemd timer (más moderno)
+#   Ver ops/systemd/compilatime-backup.service y .timer
+#
+# ============================================
