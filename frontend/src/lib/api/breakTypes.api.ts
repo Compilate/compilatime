@@ -9,8 +9,11 @@ export interface BreakType {
     active: boolean;
     requiresReason: boolean;
     maxMinutes?: number;
+    customName?: string;
+    isCustom?: boolean;
     createdAt: string;
     updatedAt: string;
+    displayName?: string; // Propiedad computada para mostrar el nombre correcto
 }
 
 export interface BreakTypeStats {
@@ -47,8 +50,22 @@ export const breakTypesApi = {
         color?: string;
         requiresReason?: boolean;
         maxMinutes?: number;
+        customName?: string;
+        isCustom?: boolean;
     }): Promise<ApiResponse<{ breakType: BreakType }>> => {
         const response = await api.post('/api/break-types', data);
+        return response as ApiResponse<{ breakType: BreakType }>;
+    },
+
+    // Crear un tipo de pausa personalizado
+    createCustomBreakType: async (data: {
+        customName: string;
+        description?: string;
+        color?: string;
+        requiresReason?: boolean;
+        maxMinutes?: number;
+    }): Promise<ApiResponse<{ breakType: BreakType }>> => {
+        const response = await api.post('/api/break-types/custom', data);
         return response as ApiResponse<{ breakType: BreakType }>;
     },
 
@@ -60,6 +77,8 @@ export const breakTypesApi = {
         active?: boolean;
         requiresReason?: boolean;
         maxMinutes?: number;
+        customName?: string;
+        isCustom?: boolean;
     }): Promise<ApiResponse<{ breakType: BreakType }>> => {
         const response = await api.put(`/api/break-types/${id}`, data);
         return response as ApiResponse<{ breakType: BreakType }>;

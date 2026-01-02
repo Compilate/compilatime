@@ -10,6 +10,7 @@ const TiposPausaPage: React.FC = () => {
     const [breakTypes, setBreakTypes] = useState<BreakType[]>([]);
     const [stats, setStats] = useState<BreakTypeStats[]>([]);
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [showCustomCreateModal, setShowCustomCreateModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showStatsModal, setShowStatsModal] = useState(false);
     const [selectedBreakType, setSelectedBreakType] = useState<BreakType | null>(null);
@@ -19,6 +20,7 @@ const TiposPausaPage: React.FC = () => {
         color: '#F59E0B',
         requiresReason: false,
         maxMinutes: '',
+        customName: '',
     });
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
@@ -99,11 +101,46 @@ const TiposPausaPage: React.FC = () => {
                     color: '#F59E0B',
                     requiresReason: false,
                     maxMinutes: '',
+                    customName: '',
                 });
                 loadBreakTypes();
             }
         } catch (err: any) {
             setError(err.message || 'Error al crear tipo de pausa');
+        }
+    };
+
+    // Crear tipo de pausa personalizado
+    const handleCreateCustom = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            setError(null);
+            setSuccess(null);
+
+            const data = {
+                customName: formData.customName,
+                description: formData.description || undefined,
+                color: formData.color,
+                requiresReason: formData.requiresReason,
+                maxMinutes: formData.maxMinutes ? parseInt(formData.maxMinutes) : undefined,
+            };
+
+            const response = await breakTypesApi.createCustomBreakType(data);
+            if (response.success) {
+                setSuccess('Tipo de pausa personalizado creado correctamente');
+                setShowCustomCreateModal(false);
+                setFormData({
+                    name: '',
+                    description: '',
+                    color: '#F59E0B',
+                    requiresReason: false,
+                    maxMinutes: '',
+                    customName: '',
+                });
+                loadBreakTypes();
+            }
+        } catch (err: any) {
+            setError(err.message || 'Error al crear tipo de pausa personalizado');
         }
     };
 
@@ -123,6 +160,7 @@ const TiposPausaPage: React.FC = () => {
                 active: selectedBreakType.active,
                 requiresReason: formData.requiresReason,
                 maxMinutes: formData.maxMinutes ? parseInt(formData.maxMinutes) : undefined,
+                customName: formData.customName || undefined,
             };
 
             const response = await breakTypesApi.updateBreakType(selectedBreakType.id, data);
@@ -136,6 +174,7 @@ const TiposPausaPage: React.FC = () => {
                     color: '#F59E0B',
                     requiresReason: false,
                     maxMinutes: '',
+                    customName: '',
                 });
                 loadBreakTypes();
             }
@@ -171,8 +210,17 @@ const TiposPausaPage: React.FC = () => {
             color: breakType.color,
             requiresReason: breakType.requiresReason,
             maxMinutes: breakType.maxMinutes?.toString() || '',
+            customName: breakType.customName || '',
         });
         setShowEditModal(true);
+    };
+
+    // Obtener el nombre a mostrar para un tipo de pausa
+    const getDisplayName = (breakType: BreakType): string => {
+        if (breakType.isCustom && breakType.customName) {
+            return breakType.customName;
+        }
+        return breakType.name;
     };
 
     // Formatear minutos a horas y minutos
@@ -209,6 +257,12 @@ const TiposPausaPage: React.FC = () => {
                         }}
                     >
                         📊 Ver Estadísticas
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        onClick={() => setShowCustomCreateModal(true)}
+                    >
+                        ✏️ Tipo Personalizado
                     </Button>
                     <Button
                         variant="primary"
@@ -274,9 +328,16 @@ const TiposPausaPage: React.FC = () => {
                                                     className="w-4 h-4 rounded mr-3"
                                                     style={{ backgroundColor: breakType.color }}
                                                 />
-                                                <span className="text-sm font-medium text-gray-900">
-                                                    {breakType.name}
-                                                </span>
+                                                <div>
+                                                    <span className="text-sm font-medium text-gray-900">
+                                                        {getDisplayName(breakType)}
+                                                    </span>
+                                                    {breakType.isCustom && (
+                                                        <span className="ml-2 text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                                                            Personalizado
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -426,6 +487,107 @@ const TiposPausaPage: React.FC = () => {
                 </div>
             )}
 
+            {/* Modal de creación personalizado */}
+            {showCustomCreateModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold text-gray-900">
+                                ✏️ Tipo de Pausa Personalizado
+                            </h3>
+                            <button
+                                onClick={() => setShowCustomCreateModal(false)}
+                                className="text-gray-400 hover:text-gray-600"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <form onSubmit={handleCreateCustom} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Nombre Personalizado * (máximo 50 caracteres)
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    maxLength={50}
+                                    value={formData.customName}
+                                    onChange={(e) => setFormData({ ...formData, customName: e.target.value })}
+                                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Ej: Médico, Trámite personal, etc."
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                    {formData.customName.length}/50 caracteres
+                                </p>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Descripción
+                                </label>
+                                <textarea
+                                    value={formData.description}
+                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                    rows={3}
+                                    placeholder="Descripción opcional del tipo de pausa"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Color
+                                </label>
+                                <div className="flex items-center space-x-3">
+                                    <input
+                                        type="color"
+                                        value={formData.color}
+                                        onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                                        className="w-12 h-12 rounded border border-gray-300 cursor-pointer"
+                                    />
+                                    <span className="text-sm text-gray-500">{formData.color}</span>
+                                </div>
+                            </div>
+                            <div className="flex items-center">
+                                <input
+                                    type="checkbox"
+                                    id="requiresReasonCustom"
+                                    checked={formData.requiresReason}
+                                    onChange={(e) => setFormData({ ...formData, requiresReason: e.target.checked })}
+                                    className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                />
+                                <label htmlFor="requiresReasonCustom" className="ml-2 block text-sm text-gray-900">
+                                    Requiere motivo
+                                </label>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Tiempo máximo (minutos)
+                                </label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={formData.maxMinutes}
+                                    onChange={(e) => setFormData({ ...formData, maxMinutes: e.target.value })}
+                                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Dejar vacío para sin límite"
+                                />
+                            </div>
+                            <div className="flex justify-end space-x-3">
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    onClick={() => setShowCustomCreateModal(false)}
+                                >
+                                    Cancelar
+                                </Button>
+                                <Button type="submit" variant="primary">
+                                    Crear
+                                </Button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
             {/* Modal de edición */}
             {showEditModal && selectedBreakType && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -457,6 +619,24 @@ const TiposPausaPage: React.FC = () => {
                                     className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                                 />
                             </div>
+                            {selectedBreakType.isCustom && (
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Nombre Personalizado (máximo 50 caracteres)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        maxLength={50}
+                                        value={formData.customName}
+                                        onChange={(e) => setFormData({ ...formData, customName: e.target.value })}
+                                        className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                        placeholder="Ej: Médico, Trámite personal, etc."
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        {formData.customName.length}/50 caracteres
+                                    </p>
+                                </div>
+                            )}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
                                     Descripción
@@ -593,7 +773,7 @@ const TiposPausaPage: React.FC = () => {
                                                             style={{ backgroundColor: stat.breakType.color }}
                                                         />
                                                         <span className="text-sm font-medium text-gray-900">
-                                                            {stat.breakType.name}
+                                                            {stat.breakType.displayName || stat.breakType.name}
                                                         </span>
                                                     </div>
                                                 </td>

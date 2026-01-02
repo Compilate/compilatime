@@ -241,7 +241,7 @@ const SelectCompanyPage: React.FC = () => {
                     </div>
 
                     <div className="mt-8 text-center text-sm text-gray-500">
-                        <p>© 2024 CompilaTime. Todos los derechos reservados.</p>
+                        <p>© {new Date().getFullYear()} CompilaTime v1.0.0. Todos los derechos reservados.</p>
                     </div>
                 </div>
             </div>

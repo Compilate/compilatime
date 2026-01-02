@@ -39,6 +39,8 @@ export class BreakTypeService {
         color?: string;
         requiresReason?: boolean;
         maxMinutes?: number;
+        customName?: string;
+        isCustom?: boolean;
     }) {
         // Verificar si ya existe un tipo de pausa con el mismo nombre
         const existing = await prisma.breakType.findFirst({
@@ -60,6 +62,43 @@ export class BreakTypeService {
                 color: data.color || '#F59E0B',
                 requiresReason: data.requiresReason ?? false,
                 maxMinutes: data.maxMinutes,
+                customName: data.customName,
+                isCustom: data.isCustom ?? false,
+            },
+        });
+    }
+
+    // Crear un tipo de pausa personalizado para un empleado
+    static async createCustomBreakType(companyId: string, data: {
+        customName: string;
+        description?: string;
+        color?: string;
+        requiresReason?: boolean;
+        maxMinutes?: number;
+    }) {
+        // Verificar si ya existe un tipo de pausa personalizado con el mismo nombre
+        const existing = await prisma.breakType.findFirst({
+            where: {
+                companyId,
+                customName: data.customName,
+                isCustom: true,
+            },
+        });
+
+        if (existing) {
+            throw new AppError('Ya existe un tipo de pausa personalizado con este nombre', 400, 'DUPLICATE_CUSTOM_BREAK_TYPE');
+        }
+
+        return await prisma.breakType.create({
+            data: {
+                companyId,
+                name: 'Personalizado',
+                description: data.description,
+                color: data.color || '#F59E0B',
+                requiresReason: data.requiresReason ?? false,
+                maxMinutes: data.maxMinutes,
+                customName: data.customName,
+                isCustom: true,
             },
         });
     }
@@ -72,6 +111,8 @@ export class BreakTypeService {
         active?: boolean;
         requiresReason?: boolean;
         maxMinutes?: number;
+        customName?: string;
+        isCustom?: boolean;
     }) {
         // Verificar si existe el tipo de pausa
         const existing = await prisma.breakType.findFirst({
@@ -100,6 +141,22 @@ export class BreakTypeService {
             }
         }
 
+        // Si se está actualizando el nombre personalizado, verificar que no exista otro con el mismo nombre
+        if (data.customName && data.customName !== existing.customName) {
+            const customNameExists = await prisma.breakType.findFirst({
+                where: {
+                    companyId,
+                    customName: data.customName,
+                    isCustom: true,
+                    id: { not: id },
+                },
+            });
+
+            if (customNameExists) {
+                throw new AppError('Ya existe un tipo de pausa personalizado con este nombre', 400, 'DUPLICATE_CUSTOM_BREAK_TYPE');
+            }
+        }
+
         return await prisma.breakType.update({
             where: { id },
             data: {
@@ -109,6 +166,8 @@ export class BreakTypeService {
                 active: data.active,
                 requiresReason: data.requiresReason,
                 maxMinutes: data.maxMinutes,
+                customName: data.customName,
+                isCustom: data.isCustom,
             },
         });
     }
@@ -227,7 +286,10 @@ export class BreakTypeService {
 
         // Convertir a array y formatear
         return Object.values(statsByType).map((stat: any) => ({
-            breakType: stat.breakType,
+            breakType: {
+                ...stat.breakType,
+                displayName: stat.breakType.isCustom ? stat.breakType.customName : stat.breakType.name,
+            },
             totalMinutes: stat.totalMinutes,
             totalHours: Math.round(stat.totalMinutes / 60 * 100) / 100,
             entryCount: stat.entryCount,

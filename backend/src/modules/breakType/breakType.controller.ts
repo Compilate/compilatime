@@ -10,6 +10,17 @@ const createBreakTypeSchema = z.object({
     color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'El color debe ser un código HEX válido').optional(),
     requiresReason: z.boolean().optional(),
     maxMinutes: z.number().int().positive().optional(),
+    customName: z.string().optional(),
+    isCustom: z.boolean().optional(),
+});
+
+// Validación para crear tipo de pausa personalizado
+const createCustomBreakTypeSchema = z.object({
+    customName: z.string().min(1, 'El nombre personalizado es requerido').max(20, 'El nombre personalizado no puede exceder 20 caracteres'),
+    description: z.string().optional(),
+    color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'El color debe ser un código HEX válido').optional(),
+    requiresReason: z.boolean().optional(),
+    maxMinutes: z.number().int().positive().optional(),
 });
 
 // Validación para actualizar tipo de pausa
@@ -20,6 +31,8 @@ const updateBreakTypeSchema = z.object({
     active: z.boolean().optional(),
     requiresReason: z.boolean().optional(),
     maxMinutes: z.number().int().positive().optional(),
+    customName: z.string().max(50, 'El nombre personalizado no puede exceder 50 caracteres').optional(),
+    isCustom: z.boolean().optional(),
 });
 
 export class BreakTypeController {
@@ -84,6 +97,23 @@ export class BreakTypeController {
                 breakType,
             },
             message: 'Tipo de pausa actualizado correctamente',
+        });
+    });
+
+    // Crear un tipo de pausa personalizado
+    static createCustomBreakType = asyncHandler(async (req: Request, res: Response) => {
+        const companyId = req.user!.companyId;
+
+        const validatedData = createCustomBreakTypeSchema.parse(req.body);
+
+        const breakType = await BreakTypeService.createCustomBreakType(companyId, validatedData);
+
+        res.status(201).json({
+            success: true,
+            data: {
+                breakType,
+            },
+            message: 'Tipo de pausa personalizado creado correctamente',
         });
     });
 

@@ -56,6 +56,7 @@ router.get('/', TimeEntryController.getTimeEntries);
 router.get('/:id', TimeEntryController.getTimeEntry);
 router.put('/:id', TimeEntryController.updateTimeEntry);
 router.delete('/:id', TimeEntryController.deleteTimeEntry);
+router.post('/continue-break', createLimit, checkSubscriptionLimits('timeEntries'), TimeEntryController.continueBreak);
 
 // Operaciones masivas
 router.post('/bulk', bulkLimit, checkSubscriptionLimits('timeEntries'), TimeEntryController.bulkCreateTimeEntries);

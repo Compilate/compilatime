@@ -23,6 +23,8 @@ interface TimeEntry {
         name: string;
         color: string;
         description?: string;
+        customName?: string;
+        isCustom?: boolean;
     };
     breakReason?: string;
 }
@@ -148,11 +150,31 @@ const RegistrosPage: React.FC = () => {
         setEditingEntry(null);
     };
 
-    const getTypeLabel = (type: string, breakType?: { name: string; color: string }) => {
+    const handleContinueBreak = async (entry: TimeEntry) => {
+        if (!entry.employee) {
+            setError('No se puede continuar la pausa: empleado no encontrado');
+            return;
+        }
+
+        try {
+            await timeEntryApi.continueBreak({
+                employeeId: entry.employee.id,
+                timestamp: new Date().toISOString(),
+                source: 'ADMIN',
+                notes: 'Reanudación manual de pausa',
+            });
+            await loadData();
+            setEditingEntry(null);
+        } catch (error: any) {
+            setError(error.message || 'Error al continuar la pausa');
+        }
+    };
+
+    const getTypeLabel = (type: string, breakType?: { name: string; color: string; customName?: string; isCustom?: boolean }) => {
         const types = {
             'IN': 'Entrada',
             'OUT': 'Salida',
-            'BREAK': breakType ? breakType.name : 'Pausa',
+            'BREAK': breakType ? (breakType.isCustom && breakType.customName ? breakType.customName : breakType.name) : 'Pausa',
             'RESUME': 'Reanudar',
         };
         return types[type as keyof typeof types] || type;
@@ -292,8 +314,16 @@ const RegistrosPage: React.FC = () => {
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getTypeBadgeClass(entry.type)}`}>
+                                                <span
+                                                    className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getTypeBadgeClass(entry.type)} ${entry.breakType?.isCustom ? 'cursor-help' : ''}`}
+                                                    title={entry.breakType?.isCustom && entry.breakType?.customName
+                                                        ? `Tipo personalizado: ${entry.breakType.customName}`
+                                                        : entry.breakType?.name || ''}
+                                                >
                                                     {getTypeLabel(entry.type, entry.breakType)}
+                                                    {entry.breakType?.isCustom && (
+                                                        <span className="ml-1 text-xs">✏️</span>
+                                                    )}
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
@@ -370,6 +400,7 @@ const RegistrosPage: React.FC = () => {
                     timeEntry={editingEntry}
                     onClose={handleCloseEditForm}
                     onSave={handleSaveTimeEntry}
+                    onContinueBreak={() => handleContinueBreak(editingEntry)}
                 />
             )}
         </div>

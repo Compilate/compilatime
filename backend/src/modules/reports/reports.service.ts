@@ -431,12 +431,10 @@ class ReportsService {
 
       const employees = await prisma.employee.findMany({
         where: employeeWhere,
-        include: {
-          employeeSchedules: {
-            include: {
-              schedule: true
-            }
-          }
+        select: {
+          id: true,
+          name: true,
+          dni: true
         }
       });
 
@@ -472,8 +470,8 @@ class ReportsService {
             companyId: e.companyId
           })), null, 2));
 
-          // Calcular retrasos
-          const delays = this.calculateDelays(timeEntries, employee.employeeSchedules);
+          // Calcular retrasos usando horarios específicos para cada fecha
+          const delays = await this.calculateDelaysWithSchedules(timeEntries, employee.id, companyId);
 
           return {
             employee: {
@@ -1156,6 +1154,90 @@ class ReportsService {
   }
 
   /**
+   * Calcula los retrasos de un empleado usando horarios específicos para cada fecha
+   */
+  private async calculateDelaysWithSchedules(timeEntries: any[], employeeId: string, companyId: string): Promise<any[]> {
+    const delays: any[] = [];
+
+    console.log('📊 calculateDelaysWithSchedules - timeEntries:', timeEntries.length);
+    console.log('📊 calculateDelaysWithSchedules - employeeId:', employeeId, '- companyId:', companyId);
+
+    // Agrupar fichajes por fecha
+    const entriesByDate: { [key: string]: any[] } = {};
+    timeEntries.forEach(entry => {
+      const date = entry.timestamp.toISOString().split('T')[0];
+      if (!entriesByDate[date]) {
+        entriesByDate[date] = [];
+      }
+      entriesByDate[date].push(entry);
+    });
+
+    console.log('📊 calculateDelaysWithSchedules - Fechas con fichajes:', Object.keys(entriesByDate).length);
+
+    // Para cada fecha, obtener los horarios del empleado y calcular retrasos
+    for (const date of Object.keys(entriesByDate)) {
+      console.log('📊 Procesando fecha:', date);
+
+      // Obtener horarios del empleado para esta fecha usando la lógica de getDailySchedule
+      const targetDate = new Date(date);
+      const dayOfWeek = targetDate.getDay(); // 0 = Domingo, 6 = Sábado
+
+      console.log('📊 Fecha:', date, '- dayOfWeek:', dayOfWeek);
+
+      // Obtener asignaciones semanales para esta fecha
+      const weekStart = new Date(targetDate);
+      const diff = targetDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+      weekStart.setDate(diff);
+      weekStart.setHours(0, 0, 0, 0);
+
+      const weekDay = weekStart.getDay();
+      const mondayDiff = weekDay === 0 ? -6 : 1 - weekDay;
+      weekStart.setDate(weekStart.getDate() + mondayDiff);
+      weekStart.setHours(0, 0, 0, 0);
+
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      weekEnd.setHours(23, 59, 59, 999);
+
+      const weeklyAssignments = await prisma.weeklySchedule.findMany({
+        where: {
+          employeeId,
+          weekStart: {
+            gte: weekStart,
+            lte: weekEnd,
+          },
+          dayOfWeek: dayOfWeek,
+          scheduleId: {
+            not: null,
+          },
+        },
+        include: {
+          schedule: true,
+        },
+      });
+
+      console.log('📊 WeeklyAssignments encontrados para fecha', date, ':', weeklyAssignments.length);
+
+      // Convertir weeklyAssignments al formato esperado por calculateDelays
+      const employeeSchedules = weeklyAssignments.map(wa => ({
+        schedule: wa.schedule
+      }));
+
+      console.log('📊 EmployeeSchedules para fecha', date, ':', employeeSchedules.length);
+
+      // Calcular retrasos para esta fecha usando los horarios específicos
+      const dateDelays = this.calculateDelays(entriesByDate[date], employeeSchedules);
+
+      console.log('📊 Retrasos para fecha', date, ':', dateDelays.length);
+
+      delays.push(...dateDelays);
+    }
+
+    console.log('📊 calculateDelaysWithSchedules - delays encontrados:', delays.length);
+    return delays;
+  }
+
+  /**
    * Calcula los retrasos de un empleado
    */
   private calculateDelays(timeEntries: any[], employeeSchedules: any[]): any[] {
@@ -1178,24 +1260,122 @@ class ReportsService {
           return;
         }
 
-        // Encontrar el turno más temprano
-        const earliestSchedule = validSchedules.reduce((earliest: any, es: any) => {
-          const [startHour, startMinute] = es.schedule.startTime.split(':').map(Number);
-          const earliestStartHour = earliest.schedule.startTime.split(':')[0];
-          const earliestStartMinute = earliest.schedule.startTime.split(':')[1];
-          const startMinutes = startHour * 60 + startMinute;
-          const earliestStartMinutes = parseInt(earliestStartHour) * 60 + parseInt(earliestStartMinute);
-          return startMinutes < earliestStartMinutes ? es : earliest;
-        }, validSchedules[0]);
-
-        const [scheduleStartHour, scheduleStartMinute] = earliestSchedule.schedule.startTime.split(':').map(Number);
-        const scheduleStartMinutes = scheduleStartHour * 60 + scheduleStartMinute;
-
         const entryTime = new Date(entry.timestamp);
-        const entryMinutes = entryTime.getHours() * 60 + entryTime.getMinutes();
+        // Usar hora UTC para evitar problemas con zonas horarias
+        const entryHour = entryTime.getUTCHours();
+        const entryMinutes = entryHour * 60 + entryTime.getUTCMinutes();
 
-        console.log('📊 Hora entrada:', entryMinutes, 'minutos');
-        console.log('📊 Hora turno:', scheduleStartMinutes, 'minutos');
+        console.log('📊 Hora entrada (UTC):', entryHour, ':', entryTime.getUTCMinutes(), '(', entryMinutes, 'minutos)');
+        console.log('📊 Hora entrada (local):', entryTime.getHours(), ':', entryTime.getMinutes());
+
+        // Determinar si el fichaje pertenece a un turno nocturno
+        // Un fichaje después de las 22:00 puede pertenecer a un turno nocturno del mismo día
+        // Un fichaje antes de las 06:00 puede pertenecer a un turno nocturno del día anterior
+        let targetSchedule: any = null;
+        let scheduleStartMinutes: number = 0;
+
+        // Buscar el turno nocturno más cercano
+        console.log('📊 Buscando turnos nocturnos...');
+        validSchedules.forEach((es: any) => {
+          const [startHour, startMinute] = es.schedule.startTime.split(':').map(Number);
+          const [endHour, endMinute] = es.schedule.endTime.split(':').map(Number);
+          const startMinutes = startHour * 60 + startMinute;
+          const endMinutes = endHour * 60 + endMinute;
+          console.log('📊   Horario:', es.schedule.name, '- Inicio:', startHour, ':', startMinute, '(', startMinutes, 'minutos)', '- Fin:', endHour, ':', endMinute, '(', endMinutes, 'minutos)', '- Es nocturno:', endMinutes < startMinutes);
+        });
+
+        const nightShifts = validSchedules.filter((es: any) => {
+          const [startHour, startMinute] = es.schedule.startTime.split(':').map(Number);
+          const [endHour, endMinute] = es.schedule.endTime.split(':').map(Number);
+          const startMinutes = startHour * 60 + startMinute;
+          const endMinutes = endHour * 60 + endMinute;
+          // Un turno nocturno cruza medianoche (endTime < startTime)
+          return endMinutes < startMinutes;
+        });
+
+        console.log('📊 Turnos nocturnos encontrados:', nightShifts.length);
+
+        if (nightShifts.length > 0) {
+          // Hay turnos nocturnos, verificar si el fichaje pertenece a uno de ellos
+          for (const es of nightShifts) {
+            const [startHour, startMinute] = es.schedule.startTime.split(':').map(Number);
+            const [endHour, endMinute] = es.schedule.endTime.split(':').map(Number);
+            const startMinutes = startHour * 60 + startMinute;
+            const endMinutes = endHour * 60 + endMinute;
+
+            // Convertir las horas de los horarios a UTC (restar 1 hora para UTC+1)
+            const startMinutesUTC = startMinutes - 60; // UTC+1
+            const endMinutesUTC = endMinutes - 60; // UTC+1
+
+            console.log('📊 Horario nocturno:', es.schedule.name);
+            console.log('📊   Hora inicio (local):', startHour, ':', startMinute, '(', startMinutes, 'minutos)');
+            console.log('📊   Hora inicio (UTC):', startMinutesUTC, 'minutos');
+            console.log('📊   Hora fin (local):', endHour, ':', endMinute, '(', endMinutes, 'minutos)');
+            console.log('📊   Hora fin (UTC):', endMinutesUTC, 'minutos');
+
+            // Para turnos nocturnos, el turno abarca desde el día anterior hasta el día siguiente
+            // Si el fichaje es después de las 22:00 (21:00 UTC), puede pertenecer a un turno nocturno del mismo día
+            // Si el fichaje es antes de las 06:00 (05:00 UTC), puede pertenecer a un turno nocturno del día anterior
+            if (entryHour >= 21) {
+              // Fichaje después de las 21:00 UTC (22:00 local), verificar si está dentro del turno nocturno
+              if (entryMinutes >= startMinutesUTC) {
+                targetSchedule = es;
+                scheduleStartMinutes = startMinutesUTC;
+                console.log('📊 Fichaje pertenece a turno nocturno (después de 21:00 UTC):', es.schedule.name);
+                break;
+              }
+            } else if (entryHour < 5) {
+              // Fichaje antes de las 05:00 UTC (06:00 local), verificar si está dentro del turno nocturno extendido
+              // El turno nocturno se extiende hasta las 05:00 UTC (06:00 local) o hasta la hora predefinida
+              const extendedEndMinutesUTC = Math.max(endMinutesUTC + 24 * 60, 300); // 300 minutos = 05:00 UTC
+              const adjustedEntryMinutes = entryMinutes + 24 * 60;
+              if (adjustedEntryMinutes <= extendedEndMinutesUTC) {
+                targetSchedule = es;
+                scheduleStartMinutes = startMinutesUTC;
+                console.log('📊 Fichaje pertenece a turno nocturno (antes de 05:00 UTC):', es.schedule.name);
+                break;
+              }
+            }
+          }
+        }
+
+        // Si no se encontró un turno nocturno, buscar el turno normal más temprano
+        if (!targetSchedule) {
+          const dayShifts = validSchedules.filter((es: any) => {
+            const [startHour, startMinute] = es.schedule.startTime.split(':').map(Number);
+            const [endHour, endMinute] = es.schedule.endTime.split(':').map(Number);
+            const startMinutes = startHour * 60 + startMinute;
+            const endMinutes = endHour * 60 + endMinute;
+            // Un turno normal no cruza medianoche (endTime >= startTime)
+            return endMinutes >= startMinutes;
+          });
+
+          if (dayShifts.length > 0) {
+            targetSchedule = dayShifts.reduce((earliest: any, es: any) => {
+              const [startHour, startMinute] = es.schedule.startTime.split(':').map(Number);
+              const earliestStartHour = earliest.schedule.startTime.split(':')[0];
+              const earliestStartMinute = earliest.schedule.startTime.split(':')[1];
+              const startMinutes = startHour * 60 + startMinute;
+              const earliestStartMinutes = parseInt(earliestStartHour) * 60 + parseInt(earliestStartMinute);
+              return startMinutes < earliestStartMinutes ? es : earliest;
+            }, dayShifts[0]);
+
+            const [scheduleStartHour, scheduleStartMinute] = targetSchedule.schedule.startTime.split(':').map(Number);
+            const scheduleStartMinutesLocal = scheduleStartHour * 60 + scheduleStartMinute;
+            // Convertir a UTC (restar 1 hora para UTC+1)
+            scheduleStartMinutes = scheduleStartMinutesLocal - 60;
+            console.log('📊 Fichaje pertenece a turno normal:', targetSchedule.schedule.name);
+            console.log('📊   Hora inicio (local):', scheduleStartHour, ':', scheduleStartMinute, '(', scheduleStartMinutesLocal, 'minutos)');
+            console.log('📊   Hora inicio (UTC):', scheduleStartMinutes, 'minutos');
+          }
+        }
+
+        if (!targetSchedule) {
+          console.log('📊 No se encontró un turno válido para este fichaje');
+          return;
+        }
+
+        console.log('📊 Hora turno (UTC):', scheduleStartMinutes, 'minutos');
         console.log('📊 Diferencia:', entryMinutes - scheduleStartMinutes, 'minutos');
 
         // Calcular el retraso
@@ -1205,7 +1385,7 @@ class ReportsService {
           delays.push({
             id: entry.id,
             timestamp: entry.timestamp,
-            scheduleStartTime: earliestSchedule.schedule.startTime,
+            scheduleStartTime: targetSchedule.schedule.startTime,
             delayMinutes,
             delayHours: delayMinutes / 60
           });

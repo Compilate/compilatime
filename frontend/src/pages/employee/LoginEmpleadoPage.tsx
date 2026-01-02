@@ -202,24 +202,6 @@ const LoginEmpleadoPage: React.FC = () => {
                             />
                         )}
 
-                        {/* Mostrar información de la empresa detectada */}
-                        {companyCodeFromUrl && (
-                            <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-                                <div className="flex">
-                                    <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <div className="ml-3">
-                                        <p className="text-sm text-blue-800">
-                                            Accediendo a la empresa: <span className="font-medium">{companyCodeFromUrl}</span>
-                                        </p>
-                                        <p className="text-xs text-blue-600 mt-1">
-                                            El código de empresa se ha detectado automáticamente desde la URL
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
 
                         <Input
                             label="DNI"

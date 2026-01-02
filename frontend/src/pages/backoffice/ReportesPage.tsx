@@ -148,23 +148,8 @@ const ReportesPage: React.FC = () => {
 
     const handleExport = async (format: 'csv' | 'pdf' | 'excel') => {
         try {
-            const response = await reportsApi.exportReport(currentReport, format, filters);
-
-            // Crear un blob y descargar el archivo
-            const blob = new Blob([response.data as BlobPart], {
-                type: format === 'csv' ? 'text/csv' :
-                    format === 'pdf' ? 'application/pdf' :
-                        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            });
-
-            const url = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `reporte-${currentReport}-${new Date().toISOString().split('T')[0]}.${format}`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(url);
+            // El método exportReport ahora maneja la descarga del archivo directamente
+            await reportsApi.exportReport(currentReport, format, filters);
         } catch (error: any) {
             setReportData(prev => ({
                 ...prev,
@@ -218,6 +203,17 @@ const ReportesPage: React.FC = () => {
 
     const renderTimeReport = () => {
         const { summary, details } = reportData.data;
+
+        // Verificar que details existe y es un array
+        if (!details || !Array.isArray(details)) {
+            return (
+                <div className="space-y-6">
+                    <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded">
+                        No hay datos disponibles para el reporte de horas.
+                    </div>
+                </div>
+            );
+        }
 
         return (
             <div className="space-y-6">
@@ -707,7 +703,11 @@ const ReportesPage: React.FC = () => {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">{detail.summary?.totalDelays || 0}</td>
                                         <td className="px-6 py-4 whitespace-nowrap">{detail.summary?.totalDelayMinutes || 0}min</td>
-                                        <td className="px-6 py-4 whitespace-nowrap">{detail.summary?.totalDelayHours ? Number(detail.summary.totalDelayHours).toFixed(2) : '0.00'}h</td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            {detail.summary?.totalDelayMinutes ?
+                                                `${Math.floor(detail.summary.totalDelayMinutes / 60)}h ${detail.summary.totalDelayMinutes % 60}min` :
+                                                '0h 0min'}
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap">{detail.summary?.averageDelayMinutes ? Math.floor(detail.summary.averageDelayMinutes) : 0}min</td>
                                     </tr>
                                 ))}
@@ -749,7 +749,9 @@ const ReportesPage: React.FC = () => {
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">{delay.scheduleStartTime}</td>
                                             <td className="px-6 py-4 whitespace-nowrap text-red-600 font-medium">{delay.delayMinutes}min</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-red-600 font-medium">{Number(delay.delayHours).toFixed(2)}h</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-red-600 font-medium">
+                                                {Math.floor(delay.delayMinutes / 60)}h {delay.delayMinutes % 60}min
+                                            </td>
                                         </tr>
                                     ))
                                 )}

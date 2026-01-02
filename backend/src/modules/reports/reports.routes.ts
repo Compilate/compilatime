@@ -44,7 +44,7 @@ router.get('/delays',
 // Exportar reportes
 router.get('/export/:reportType/:format',
     reportLimiter,
-    reportsController.exportReport
+    (req, res) => reportsController.exportReport(req, res)
 );
 
 // Endpoint para obtener opciones disponibles para filtros

@@ -22,12 +22,14 @@ interface TimeEntryEditFormProps {
     timeEntry: TimeEntry;
     onClose: () => void;
     onSave: (updatedEntry: TimeEntry) => void;
+    onContinueBreak?: () => void; // Nuevo prop para continuar pausa
 }
 
 const TimeEntryEditForm: React.FC<TimeEntryEditFormProps> = ({
     timeEntry,
     onClose,
-    onSave
+    onSave,
+    onContinueBreak
 }) => {
     const [formData, setFormData] = useState({
         type: timeEntry.type,
@@ -198,6 +200,17 @@ const TimeEntryEditForm: React.FC<TimeEntryEditFormProps> = ({
                         >
                             Cancelar
                         </Button>
+                        {onContinueBreak && (
+                            <Button
+                                type="button"
+                                onClick={onContinueBreak}
+                                variant="primary"
+                                disabled={loading}
+                                className="bg-blue-600 hover:bg-blue-700"
+                            >
+                                Continuar Pausa
+                            </Button>
+                        )}
                         <Button
                             type="submit"
                             disabled={loading}

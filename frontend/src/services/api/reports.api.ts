@@ -445,46 +445,54 @@ export const reportsApi = {
     filters: ReportFilters,
     exportOptions?: Partial<ExportOptions>
   ) => {
-    const params = new URLSearchParams();
+    const params: Record<string, string> = {};
 
     if (filters.employeeIds && filters.employeeIds.length > 0) {
-      params.append('employeeIds', filters.employeeIds.join(','));
+      params.employeeIds = filters.employeeIds.join(',');
     }
 
-    params.append('startDate', filters.startDate);
-    params.append('endDate', filters.endDate);
+    params.startDate = filters.startDate;
+    params.endDate = filters.endDate;
 
     if (filters.groupBy) {
-      params.append('groupBy', filters.groupBy);
+      params.groupBy = filters.groupBy;
     }
 
     if (filters.scheduleIds && filters.scheduleIds.length > 0) {
-      params.append('scheduleIds', filters.scheduleIds.join(','));
+      params.scheduleIds = filters.scheduleIds.join(',');
     }
 
     if (filters.departmentIds && filters.departmentIds.length > 0) {
-      params.append('departmentIds', filters.departmentIds.join(','));
+      params.departmentIds = filters.departmentIds.join(',');
     }
 
     if (exportOptions?.includeCharts !== undefined) {
-      params.append('includeCharts', exportOptions.includeCharts.toString());
+      params.includeCharts = exportOptions.includeCharts.toString();
     }
 
     if (exportOptions?.includeDetails !== undefined) {
-      params.append('includeDetails', exportOptions.includeDetails.toString());
+      params.includeDetails = exportOptions.includeDetails.toString();
     }
 
     if (exportOptions?.email) {
-      params.append('email', exportOptions.email);
+      params.email = exportOptions.email;
     }
 
-    const response = await apiClient.get(
-      `/api/reports/export/${reportType}/${format}?${params.toString()}`,
-      {
-        responseType: 'blob' // Para manejar la descarga de archivos
-      }
+    const blob = await apiClient.getBlob(
+      `/api/reports/export/${reportType}/${format}`,
+      params
     );
 
-    return response;
+    // Crear URL de descarga
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `reporte-${reportType}-${new Date().toISOString().split('T')[0]}.${format}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+
+    return { success: true };
   }
 };

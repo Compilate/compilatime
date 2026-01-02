@@ -97,6 +97,9 @@ export class AutoPunchoutService {
         try {
             const now = new Date();
             const employeeId = employee.id;
+            const today = now.toISOString().split('T')[0];
+
+            console.log(`🔍 Procesando empleado ${employee.name} (${employeeId}) para fecha ${today}`);
 
             // Obtener el último fichaje del empleado
             const lastEntry = await prisma.timeEntry.findFirst({
@@ -110,26 +113,31 @@ export class AutoPunchoutService {
             });
 
             if (!lastEntry) {
+                console.log(`🔍 Empleado ${employee.name}: no hay fichajes para procesar`);
                 return; // No hay fichajes para procesar
             }
 
+            console.log(`🔍 Empleado ${employee.name}: último fichaje ${lastEntry.type} a las ${lastEntry.timestamp}`);
+
             // Solo procesar si el último fichaje es de entrada (IN) o reanudar (RESUME)
             if (lastEntry.type !== TimeEntryType.IN && lastEntry.type !== TimeEntryType.RESUME) {
+                console.log(`🔍 Empleado ${employee.name}: último fichaje no es IN o RESUME, no procesando`);
                 return;
             }
 
             const entryTime = new Date(lastEntry.timestamp);
             const minutesSinceEntry = Math.floor((now.getTime() - entryTime.getTime()) / (1000 * 60));
+            const entryDate = entryTime.toISOString().split('T')[0];
 
-            console.log(`🔍 Empleado ${employee.name}: último fichaje ${lastEntry.type} hace ${minutesSinceEntry} minutos`);
+            console.log(`🔍 Empleado ${employee.name}: último fichaje ${lastEntry.type} hace ${minutesSinceEntry} minutos (máximo: ${config.maxMinutes})`);
+            console.log(`🔍 Empleado ${employee.name}: fecha del fichaje ${entryDate}`);
 
             // Si ha pasado más tiempo del configurado, verificar si necesita cierre automático
             if (minutesSinceEntry > config.maxMinutes) {
                 console.log(`🔍 Empleado ${employee.name}: excedió tiempo máximo (${minutesSinceEntry} > ${config.maxMinutes})`);
 
-                // Obtener horario del empleado para el día actual
-                const today = now.toISOString().split('T')[0];
-                const employeeSchedule = await this.getEmployeeSchedule(companyId, employeeId, today);
+                // Obtener horario del empleado para el día del fichaje (no para el día actual)
+                const employeeSchedule = await this.getEmployeeSchedule(companyId, employeeId, entryDate);
 
                 if (employeeSchedule && employeeSchedule.schedules.length > 0) {
                     // Verificar cada turno del día
@@ -173,6 +181,9 @@ export class AutoPunchoutService {
         try {
             const now = new Date();
             const entryTime = new Date(lastEntry.timestamp);
+            const entryDate = entryTime.toISOString().split('T')[0];
+
+            console.log(`🔍 processScheduleAutoPunchout - entryDate: ${entryDate}`);
 
             // Convertir horas del horario a minutos desde medianoche
             const [scheduleStartHour, scheduleStartMinute] = schedule.startTime.split(':').map(Number);
@@ -186,19 +197,25 @@ export class AutoPunchoutService {
                 scheduleEndMinutes += 24 * 60;
             }
 
-            // Crear fechas para el turno de hoy
-            const today = new Date();
-            const scheduleStartDate = new Date(today);
+            // Crear fechas para el turno usando la fecha del fichaje (no la fecha actual)
+            const scheduleStartDate = new Date(entryDate);
             scheduleStartDate.setHours(scheduleStartHour, scheduleStartMinute, 0, 0);
 
-            const scheduleEndDate = new Date(today);
+            const scheduleEndDate = new Date(entryDate);
             if (scheduleEndHour < scheduleStartHour) {
                 // Si cruza medianoche, es el día siguiente
                 scheduleEndDate.setDate(scheduleEndDate.getDate() + 1);
             }
             scheduleEndDate.setHours(scheduleEndHour, scheduleEndMinute, 0, 0);
 
+            // Ajustar scheduleEndDate para que sea después de scheduleStartDate
+            if (scheduleEndDate <= scheduleStartDate) {
+                scheduleEndDate.setDate(scheduleEndDate.getDate() + 1);
+            }
+
             console.log(`🔍 Turno ${schedule.name}: ${schedule.startTime} - ${schedule.endTime}`);
+            console.log(`🔍 scheduleStartDate: ${scheduleStartDate.toISOString()}, scheduleEndDate: ${scheduleEndDate.toISOString()}`);
+            console.log(`🔍 entryTime: ${entryTime.toISOString()}, now: ${now.toISOString()}`);
 
             // Caso 1: Entrada antes del inicio del turno y ya pasó el tiempo de margen antes
             if (entryTime < scheduleStartDate && now > scheduleStartDate) {
@@ -219,12 +236,19 @@ export class AutoPunchoutService {
             if (entryTime >= scheduleStartDate && entryTime <= scheduleEndDate && now > scheduleEndDate) {
                 const minutesAfterEnd = Math.floor((now.getTime() - scheduleEndDate.getTime()) / (1000 * 60));
                 if (minutesAfterEnd > config.marginAfter) {
+                    // Generar un tiempo de cierre aleatorio dentro del rango de margen
+                    const randomMinutes = Math.floor(Math.random() * (config.marginAfter + config.marginBefore + 1)) - config.marginBefore;
+                    const punchoutTime = new Date(scheduleEndDate.getTime() + randomMinutes * 60 * 1000);
+
+                    console.log(`🎲 Cierre aleatorio: ${randomMinutes} minutos después del fin del turno (${schedule.endTime})`);
+                    console.log(`🎲 Hora de cierre: ${punchoutTime.toISOString()}`);
+
                     await this.createAutoPunchout(
                         companyId,
                         employee.id,
                         lastEntry,
-                        scheduleEndDate,
-                        `Cierre automático: fin de turno excedido por ${minutesAfterEnd}min (margen: ${config.marginAfter}min)`
+                        punchoutTime,
+                        `Cierre automático: fin de turno excedido por ${minutesAfterEnd}min (margen: ${config.marginAfter}min, cierre aleatorio: ${randomMinutes}min)`
                     );
                     return;
                 }
@@ -232,8 +256,9 @@ export class AutoPunchoutService {
 
             // Caso 3: Entrada después del fin del turno (caso especial)
             if (entryTime > scheduleEndDate) {
-                const minutesAfterEnd = Math.floor((now.getTime() - scheduleEndDate.getTime()) / (1000 * 60));
-                if (minutesAfterEnd > config.marginAfter) {
+                // Calcular tiempo desde la entrada hasta ahora
+                const minutesSinceEntry = Math.floor((now.getTime() - entryTime.getTime()) / (1000 * 60));
+                if (minutesSinceEntry > config.maxMinutes) {
                     await this.createAutoPunchout(
                         companyId,
                         employee.id,
@@ -282,7 +307,7 @@ export class AutoPunchoutService {
                     employeeId: employeeId,
                     type: TimeEntryType.OUT,
                     timestamp: punchoutTime,
-                    source: TimeEntrySource.ADMIN,
+                    source: TimeEntrySource.AUTO_PUNCHOUT,
                     notes: `Cierre automático: ${reason}`,
                     createdByEmployee: false,
                 },
@@ -311,47 +336,74 @@ export class AutoPunchoutService {
             const targetDate = new Date(date);
             const dayOfWeek = targetDate.getDay();
 
-            // Obtener horarios asignados al empleado
-            const employeeSchedules = await prisma.employeeSchedule.findMany({
+            console.log(`🔍 getEmployeeSchedule - employeeId: ${employeeId}, date: ${date}, dayOfWeek: ${dayOfWeek}`);
+
+            // Obtener asignaciones semanales para esta fecha usando la misma lógica que getDailySchedule
+            const weekStart = new Date(targetDate);
+            const diff = targetDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+            weekStart.setDate(diff);
+            weekStart.setHours(0, 0, 0, 0);
+
+            const weekDay = weekStart.getDay();
+            const mondayDiff = weekDay === 0 ? -6 : 1 - weekDay;
+            weekStart.setDate(weekStart.getDate() + mondayDiff);
+            weekStart.setHours(0, 0, 0, 0);
+
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekStart.getDate() + 6);
+            weekEnd.setHours(23, 59, 59, 999);
+
+            console.log(`🔍 getEmployeeSchedule - weekStart: ${weekStart.toISOString()}, weekEnd: ${weekEnd.toISOString()}`);
+
+            const weeklyAssignments = await prisma.weeklySchedule.findMany({
                 where: {
-                    employeeId: employeeId,
-                    schedule: {
-                        companyId: companyId,
-                        active: true,
-                        scheduleDays: {
-                            some: {
-                                dayOfWeek: dayOfWeek
-                            }
-                        }
+                    employeeId,
+                    weekStart: {
+                        gte: weekStart,
+                        lte: weekEnd,
                     },
-                    active: true,
-                    startDate: {
-                        lte: targetDate,
+                    dayOfWeek: dayOfWeek,
+                    scheduleId: {
+                        not: null,
                     },
-                    OR: [
-                        { endDate: null },
-                        { endDate: { gte: targetDate } },
-                    ],
                 },
                 include: {
                     schedule: true,
                 },
-                distinct: ['scheduleId'],
             });
 
-            if (employeeSchedules.length > 0) {
+            console.log(`🔍 getEmployeeSchedule - weeklyAssignments encontrados: ${weeklyAssignments.length}`);
+            weeklyAssignments.forEach((wa: any) => {
+                console.log(`🔍 getEmployeeSchedule - weeklyAssignment:`, {
+                    id: wa.id,
+                    employeeId: wa.employeeId,
+                    weekStart: wa.weekStart,
+                    dayOfWeek: wa.dayOfWeek,
+                    scheduleId: wa.scheduleId,
+                    schedule: wa.schedule ? {
+                        id: wa.schedule.id,
+                        name: wa.schedule.name,
+                        startTime: wa.schedule.startTime,
+                        endTime: wa.schedule.endTime,
+                    } : null,
+                });
+            });
+
+            if (weeklyAssignments.length > 0) {
+                console.log(`🔍 getEmployeeSchedule - usando ${weeklyAssignments.length} asignaciones semanales`);
                 return {
-                    schedules: employeeSchedules.map((es: any) => ({
-                        id: es.schedule.id,
-                        name: es.schedule.name,
-                        startTime: es.schedule.startTime,
-                        endTime: es.schedule.endTime,
-                        color: es.schedule.color,
+                    schedules: weeklyAssignments.map((wa: any) => ({
+                        id: wa.schedule!.id,
+                        name: wa.schedule!.name,
+                        startTime: wa.schedule!.startTime,
+                        endTime: String(wa.schedule!.endTime).replace(/"/g, ''),
+                        color: wa.schedule!.color,
                         isReference: false,
                     })),
                 };
             }
 
+            console.log(`🔍 getEmployeeSchedule - no hay asignaciones semanales, usando horarios de la empresa`);
             // Si no hay asignaciones, obtener horarios de la empresa como referencia
             const companySchedules = await prisma.schedule.findMany({
                 where: {
@@ -361,6 +413,16 @@ export class AutoPunchoutService {
                 orderBy: {
                     startTime: 'asc',
                 },
+            });
+
+            console.log(`🔍 getEmployeeSchedule - companySchedules encontrados: ${companySchedules.length}`);
+            companySchedules.forEach((schedule: any) => {
+                console.log(`🔍 getEmployeeSchedule - companySchedule:`, {
+                    id: schedule.id,
+                    name: schedule.name,
+                    startTime: schedule.startTime,
+                    endTime: schedule.endTime,
+                });
             });
 
             return {

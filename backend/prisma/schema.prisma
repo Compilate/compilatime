@@ -8,52 +8,50 @@ datasource db {
 }
 
 model Company {
-  id                    String                 @id @default(cuid())
-  name                  String
-  slug                  String                 @unique
-  email                 String                 @unique
-  phone                 String?
-  address               String?
-  logo                  String?
-  timezone              String                 @default("Europe/Madrid")
-  locale                String                 @default("es")
-  settings              Json?
-  active                Boolean                @default(true)
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
-  currentSubscriptionId String?
-  isActive              Boolean                @default(true)
-  suspensionReason      String?
-  geofenceRadius        Float?                 @default(100)
-  latitude              Float?
-  longitude             Float?
-  requireGeolocation    Boolean                @default(false)
-  // Configuración de cierre automático
-  autoPunchoutEnabled  Boolean                @default(false)
-  autoPunchoutMaxMinutes Int                    @default(480) // 8 horas = 480 minutos
-  autoPunchoutMarginBefore Int                   @default(15)  // 15 minutos antes del fin de turno
-  autoPunchoutMarginAfter  Int                  @default(30)  // 30 minutos después del fin de turno
-  // Configuración de acceso a zona personal de empleados
-  enableEmployeePortal Boolean                 @default(true)
-  absenceRequests       AbsenceRequest[]
-  absences              Absence[]
-  currentSubscription   Subscription?          @relation("CurrentSubscription", fields: [currentSubscriptionId], references: [id])
-  companyHolidays       CompanyHoliday[]
-  companyUsers          CompanyUser[]
-  employeeCompanies     EmployeeCompany[]
-  notificationTemplates NotificationTemplate[]
-  notifications         Notification[]
-  overtimeRules         OvertimeRule[]
-  reports               Report[]
-  schedules             Schedule[]
-  subscriptions         Subscription[]
-  timeEntries           TimeEntry[]
-  vacationBalances      VacationBalance[]
-  vacationPolicies      VacationPolicy[]
-  weeklySchedules       WeeklySchedule[]
-  weeklyTemplates       WeeklyTemplate[]
-  workDays              WorkDay[]
-  breakTypes            BreakType[]
+  id                       String                 @id @default(cuid())
+  name                     String
+  slug                     String                 @unique
+  email                    String                 @unique
+  phone                    String?
+  address                  String?
+  logo                     String?
+  timezone                 String                 @default("Europe/Madrid")
+  locale                   String                 @default("es")
+  settings                 Json?
+  active                   Boolean                @default(true)
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+  currentSubscriptionId    String?
+  isActive                 Boolean                @default(true)
+  suspensionReason         String?
+  geofenceRadius           Float?                 @default(100)
+  latitude                 Float?
+  longitude                Float?
+  requireGeolocation       Boolean                @default(false)
+  autoPunchoutEnabled      Boolean                @default(false)
+  autoPunchoutMarginAfter  Int                    @default(30)
+  autoPunchoutMarginBefore Int                    @default(15)
+  autoPunchoutMaxMinutes   Int                    @default(480)
+  enableEmployeePortal     Boolean                @default(true)
+  absenceRequests          AbsenceRequest[]
+  absences                 Absence[]
+  breakTypes               BreakType[]
+  currentSubscription      Subscription?          @relation("CurrentSubscription", fields: [currentSubscriptionId], references: [id])
+  companyHolidays          CompanyHoliday[]
+  companyUsers             CompanyUser[]
+  employeeCompanies        EmployeeCompany[]
+  notificationTemplates    NotificationTemplate[]
+  notifications            Notification[]
+  overtimeRules            OvertimeRule[]
+  reports                  Report[]
+  schedules                Schedule[]
+  subscriptions            Subscription[]
+  timeEntries              TimeEntry[]
+  vacationBalances         VacationBalance[]
+  vacationPolicies         VacationPolicy[]
+  weeklySchedules          WeeklySchedule[]
+  weeklyTemplates          WeeklyTemplate[]
+  workDays                 WorkDay[]
 
   @@map("companies")
 }
@@ -256,27 +254,29 @@ model TimeEntry {
   longitude         Float?
   breakTypeId       String?
   breakReason       String?
+  breakType         BreakType?         @relation(fields: [breakTypeId], references: [id])
   company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   employee          Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   editLogs          TimeEntryEditLog[]
-  breakType         BreakType?         @relation(fields: [breakTypeId], references: [id])
 
   @@map("time_entries")
 }
 
 model BreakType {
-  id          String   @id @default(cuid())
-  companyId   String
-  name        String
-  description String?
-  color       String   @default("#F59E0B")
-  active      Boolean  @default(true)
-  requiresReason Boolean @default(false)
-  maxMinutes  Int?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  timeEntries TimeEntry[]
-  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id             String      @id @default(cuid())
+  companyId      String
+  name           String
+  description    String?
+  color          String      @default("#F59E0B")
+  active         Boolean     @default(true)
+  requiresReason Boolean     @default(false)
+  maxMinutes     Int?
+  customName     String?
+  isCustom       Boolean     @default(false)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  company        Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  timeEntries    TimeEntry[]
 
   @@unique([companyId, name])
   @@map("break_types")
@@ -627,11 +627,12 @@ enum TimeEntryType {
 }
 
 enum TimeEntrySource {
-  WEB
-  MOBILE
-  ADMIN
-  API
-  KIOSK
+    WEB
+    MOBILE
+    ADMIN
+    API
+    KIOSK
+    AUTO_PUNCHOUT
 }
 
 enum WorkDayStatus {

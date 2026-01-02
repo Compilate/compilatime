@@ -19,6 +19,9 @@ router.get('/:id', BreakTypeController.getBreakTypeById);
 // Crear un nuevo tipo de pausa
 router.post('/', BreakTypeController.createBreakType);
 
+// Crear un tipo de pausa personalizado
+router.post('/custom', BreakTypeController.createCustomBreakType);
+
 // Actualizar un tipo de pausa
 router.put('/:id', BreakTypeController.updateBreakType);
 

@@ -231,4 +231,6 @@ Para soporte técnico o preguntas:
 
 ---
 
-**CompilaTime** © 2024 - Sistema de Registro Horario Profesional
+**CompilaTime** v1.0.0 © 2025 - Sistema de Registro Horario Profesional
+
+> **Nota:** El año del copyright debería actualizarse anualmente.

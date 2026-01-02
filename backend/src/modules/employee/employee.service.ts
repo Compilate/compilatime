@@ -841,7 +841,7 @@ export class EmployeeService {
             <p>Saludos,<br>El equipo de CompilaTime</p>
           </div>
           <div style="background: #f3f4f6; padding: 20px; text-align: center; font-size: 12px; color: #666;">
-            <p>© 2024 CompilaTime. Todos los derechos reservados.</p>
+            <p>© ${new Date().getFullYear()} CompilaTime v1.0.0. Todos los derechos reservados.</p>
           </div>
         </div>
       `;

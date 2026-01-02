@@ -177,6 +177,8 @@ export class TimeEntryService {
                             name: true,
                             description: true,
                             color: true,
+                            customName: true,
+                            isCustom: true,
                         },
                     },
                     editLogs: {
@@ -273,6 +275,8 @@ export class TimeEntryService {
                                 name: true,
                                 description: true,
                                 color: true,
+                                customName: true,
+                                isCustom: true,
                             },
                         },
                     },
@@ -532,6 +536,8 @@ export class TimeEntryService {
                                 name: true,
                                 description: true,
                                 color: true,
+                                customName: true,
+                                isCustom: true,
                             },
                         },
                     },
@@ -659,6 +665,8 @@ export class TimeEntryService {
                                 name: true,
                                 description: true,
                                 color: true,
+                                customName: true,
+                                isCustom: true,
                             },
                         },
                     },
@@ -704,13 +712,17 @@ export class TimeEntryService {
 
             console.log(`🔍 Validando fichaje: ${type} a las ${now.toISOString()}, día de trabajo: ${workDayStart.toISOString()}`);
 
-            // Obtener todos los registros del empleado en el día de trabajo actual
-            const todayEntries = await prisma.timeEntry.findMany({
+            // Para manejar turnos nocturnos, buscar registros en las últimas 48 horas
+            // Esto permite encontrar entradas del día anterior cuando se trata de un turno nocturno
+            const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+            // Obtener todos los registros del empleado en las últimas 48 horas
+            const recentEntries = await prisma.timeEntry.findMany({
                 where: {
                     employeeId,
                     companyId,
                     timestamp: {
-                        gte: workDayStart,
+                        gte: fortyEightHoursAgo,
                     },
                 },
                 orderBy: { timestamp: 'desc' },
@@ -721,14 +733,16 @@ export class TimeEntryService {
                             name: true,
                             description: true,
                             color: true,
+                            customName: true,
+                            isCustom: true,
                         },
                     },
                 },
             });
 
-            const lastEntry = todayEntries[0]; // El más reciente
+            const lastEntry = recentEntries[0]; // El más reciente
 
-            console.log(`🔍 Validando fichaje: ${type}, último registro: ${lastEntry?.type}, total hoy: ${todayEntries.length}`);
+            console.log(`🔍 Validando fichaje: ${type}, último registro: ${lastEntry?.type}, total recientes: ${recentEntries.length}`);
 
             // Validar reglas de fichaje
             if (lastEntry) {
@@ -773,10 +787,12 @@ export class TimeEntryService {
                 }
             }
 
-            // Validaciones adicionales basadas en el historial completo del día
-            const hasActiveBreak = todayEntries.some(entry => entry.type === TimeEntryType.BREAK) &&
-                !todayEntries.some(entry => entry.type === TimeEntryType.RESUME &&
-                    todayEntries.findIndex(e => e.id === entry.id) > todayEntries.findIndex(e => e.type === TimeEntryType.BREAK));
+            // Validaciones adicionales basadas en el historial completo de las últimas 48 horas
+            // recentEntries está ordenado por timestamp descendente (más reciente primero)
+            // Encontrar la primera pausa (la más reciente) y verificar si tiene un RESUME después
+            const firstBreakIndex = recentEntries.findIndex(entry => entry.type === TimeEntryType.BREAK);
+            const hasActiveBreak = firstBreakIndex !== -1 &&
+                !recentEntries.slice(0, firstBreakIndex).some(entry => entry.type === TimeEntryType.RESUME);
 
             if (hasActiveBreak && type !== TimeEntryType.RESUME) {
                 throw new Error('Tienes una pausa activa. Debes reanudar el trabajo antes de continuar.');
@@ -837,6 +853,8 @@ export class TimeEntryService {
                             name: true,
                             description: true,
                             color: true,
+                            customName: true,
+                            isCustom: true,
                         },
                     },
                 },
@@ -1139,6 +1157,8 @@ export class TimeEntryService {
                             name: true,
                             description: true,
                             color: true,
+                            customName: true,
+                            isCustom: true,
                         },
                     },
                 },
@@ -1196,6 +1216,92 @@ export class TimeEntryService {
             };
         } catch (error) {
             console.error(`❌ Error obteniendo estado de fichaje del empleado ${employeeId}:`, error);
+            throw error;
+        }
+    }
+
+    // Continuar una pausa existente (crear un registro RESUME manual)
+    static async continueBreak(
+        companyId: string,
+        employeeId: string,
+        timestamp?: string,
+        source: TimeEntrySource = TimeEntrySource.ADMIN,
+        location?: string,
+        latitude?: number,
+        longitude?: number,
+        isRemoteWork?: boolean,
+        deviceInfo?: string,
+        notes?: string
+    ): Promise<TimeEntry> {
+        try {
+            console.log(`🔍 DEBUG continueBreak - Buscando último registro para empleado ${employeeId}`);
+
+            // Obtener el último registro del empleado (sin importar la fecha)
+            const lastEntry = await prisma.timeEntry.findFirst({
+                where: {
+                    employeeId,
+                    companyId,
+                },
+                orderBy: { timestamp: 'desc' },
+            });
+
+            if (!lastEntry) {
+                throw new Error('No se encontraron registros de fichaje para el empleado');
+            }
+
+            // Verificar que el último registro sea una pausa
+            if (lastEntry.type !== TimeEntryType.BREAK) {
+                throw new Error('El último registro no es una pausa. Solo se pueden continuar pausas activas.');
+            }
+
+            // Verificar si el empleado existe y está activo a través de EmployeeCompany
+            const employeeCompany = await (prisma as any).employeeCompany.findFirst({
+                where: {
+                    employeeId,
+                    companyId,
+                    active: true,
+                },
+                include: {
+                    employee: true,
+                },
+            });
+
+            const employee = employeeCompany?.employee;
+
+            if (!employee) {
+                throw new Error('Empleado no encontrado o no está activo');
+            }
+
+            // Crear registro de reanudación directamente sin validación de reglas de fichaje
+            const resumeTimestamp = timestamp || new Date().toISOString();
+            const timeEntry = await prisma.timeEntry.create({
+                data: {
+                    companyId,
+                    employeeId,
+                    type: TimeEntryType.RESUME,
+                    timestamp: new Date(resumeTimestamp),
+                    source,
+                    location,
+                    latitude,
+                    longitude,
+                    isRemoteWork: isRemoteWork || false,
+                    deviceInfo,
+                    notes: notes || 'Reanudación manual de pausa',
+                    createdByEmployee: false,
+                },
+            });
+
+            // Actualizar WorkDay si es necesario
+            await this.updateWorkDay(companyId, employeeId, new Date(resumeTimestamp));
+
+            // Limpiar caché
+            await cache.clearPattern(`time-entries:${companyId}:*`);
+            await cache.clearPattern(`work-days:${companyId}:*`);
+
+            console.log(`✅ Registro de reanudación creado: ${employee.name} - RESUME`);
+            return timeEntry;
+        } catch (error) {
+            console.error('❌ Error en continueBreak:', error);
             throw error;
         }
     }

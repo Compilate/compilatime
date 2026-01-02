@@ -115,8 +115,8 @@ class ApiClient {
         window.dispatchEvent(event);
     }
 
-    // Método genérico para hacer peticiones
-    private async request<T>(
+    // Método genérico para hacer peticiones JSON
+    private async requestJson<T>(
         endpoint: string,
         options: RequestInit = {}
     ): Promise<ApiResponse<T>> {
@@ -171,6 +171,42 @@ class ApiClient {
         }
     }
 
+    // Método genérico para hacer peticiones Blob
+    private async requestBlob(
+        endpoint: string,
+        options: RequestInit = {}
+    ): Promise<Blob> {
+        const url = `${this.baseURL}${endpoint}`;
+
+        // Obtener headers de autenticación
+        const headers = {
+            ...this.getAuthHeaders(),
+            ...options.headers,
+        };
+
+        console.log(`🔄 [API Client] Request: ${options.method || 'GET'} ${url}`);
+        console.log('🔄 [API Client] Request headers:', headers);
+        console.log('🔄 [API Client] Request body:', options.body);
+
+        try {
+            const response = await fetch(url, {
+                ...options,
+                headers,
+            });
+
+            if (!response.ok) {
+                // Intentar leer el error como JSON
+                const errorData = await response.json().catch(() => ({ message: 'Error desconocido' }));
+                throw new Error(errorData.error || errorData.message || `HTTP error! status: ${response.status}`);
+            }
+
+            return await response.blob();
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    }
+
     // Métodos HTTP
     async get<T>(endpoint: string, params?: Record<string, any>): Promise<ApiResponse<T>> {
         const url = new URL(`${this.baseURL}${endpoint}`);
@@ -182,27 +218,43 @@ class ApiClient {
             });
         }
 
-        return this.request<T>(url.pathname + url.search, {
+        return this.requestJson<T>(url.pathname + url.search, {
+            method: 'GET',
+        });
+    }
+
+    // Método para obtener un blob (archivo)
+    async getBlob(endpoint: string, params?: Record<string, any>): Promise<Blob> {
+        const url = new URL(`${this.baseURL}${endpoint}`);
+        if (params) {
+            Object.entries(params).forEach(([key, value]) => {
+                if (value !== undefined && value !== null) {
+                    url.searchParams.append(key, String(value));
+                }
+            });
+        }
+
+        return this.requestBlob(url.pathname + url.search, {
             method: 'GET',
         });
     }
 
     async post<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
-        return this.request<T>(endpoint, {
+        return this.requestJson<T>(endpoint, {
             method: 'POST',
             body: data ? JSON.stringify(data) : undefined,
         });
     }
 
     async put<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
-        return this.request<T>(endpoint, {
+        return this.requestJson<T>(endpoint, {
             method: 'PUT',
             body: data ? JSON.stringify(data) : undefined,
         });
     }
 
     async patch<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
-        return this.request<T>(endpoint, {
+        return this.requestJson<T>(endpoint, {
             method: 'PATCH',
             body: data ? JSON.stringify(data) : undefined,
         });
@@ -210,7 +262,7 @@ class ApiClient {
 
     async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
         console.log('🔄 [API Client] DELETE request a:', endpoint);
-        return this.request<T>(endpoint, {
+        return this.requestJson<T>(endpoint, {
             method: 'DELETE',
         });
     }
@@ -230,7 +282,7 @@ class ApiClient {
         // Eliminar Content-Type para que el navegador lo establezca automáticamente con boundary
         delete headers['Content-Type'];
 
-        return this.request<T>(endpoint, {
+        return this.requestJson<T>(endpoint, {
             method: 'POST',
             body: formData,
             headers,
@@ -500,6 +552,20 @@ export const timeEntryApi = {
         const url = reason ? `/api/time-entries/${id}?reason=${encodeURIComponent(reason)}` : `/api/time-entries/${id}`;
         return apiClient.delete(url);
     },
+
+    // Continuar una pausa existente
+    continueBreak: (data: {
+        employeeId: string;
+        timestamp?: string;
+        source?: string;
+        location?: string;
+        latitude?: number;
+        longitude?: number;
+        isRemoteWork?: boolean;
+        deviceInfo?: string;
+        notes?: string;
+    }) =>
+        apiClient.post('/api/time-entries/continue-break', data),
 
     // Exportación
     exportTimeEntries: (_params: any) =>

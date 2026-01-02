@@ -39,6 +39,8 @@ const FicharPage: React.FC = () => {
     const [showBreakTypeModal, setShowBreakTypeModal] = useState(false);
     const [selectedBreakType, setSelectedBreakType] = useState<BreakType | null>(null);
     const [breakReason, setBreakReason] = useState('');
+    const [showCustomBreakInput, setShowCustomBreakInput] = useState(false);
+    const [customBreakName, setCustomBreakName] = useState('');
 
     useEffect(() => {
         // Verificar si la geolocalización está disponible
@@ -316,10 +318,54 @@ const FicharPage: React.FC = () => {
         // Siempre mostrar el modal de selección de tipo de pausa
         // Si no hay tipos de pausa, el usuario podrá ver que no hay tipos disponibles
         setShowBreakTypeModal(true);
+        setShowCustomBreakInput(false);
+        setCustomBreakName('');
         console.log('🔍 showBreakTypeModal después:', true);
     };
 
-    const handleBreakTypeConfirm = () => {
+    const handleBreakTypeConfirm = async () => {
+        // Si se está mostrando el campo de nombre personalizado
+        if (showCustomBreakInput) {
+            if (!customBreakName.trim()) {
+                setErrors({ general: 'Debes escribir un nombre para el tipo de pausa' });
+                return;
+            }
+
+            if (customBreakName.length > 20) {
+                setErrors({ general: 'El nombre no puede exceder 20 caracteres' });
+                return;
+            }
+
+            try {
+                setLoading(true);
+                // Crear tipo de pausa personalizado
+                const response = await breakTypesApi.createCustomBreakType({
+                    customName: customBreakName.trim(),
+                    description: 'Tipo de pausa personalizado por empleado',
+                    color: '#6B7280',
+                    requiresReason: false,
+                });
+
+                if (response.success && response.data) {
+                    // Usar el tipo de pausa personalizado recién creado
+                    handlePunch('BREAK', response.data.breakType.id, breakReason);
+                    setShowBreakTypeModal(false);
+                    setSelectedBreakType(null);
+                    setBreakReason('');
+                    setShowCustomBreakInput(false);
+                    setCustomBreakName('');
+                } else {
+                    setErrors({ general: response.message || 'Error al crear tipo de pausa personalizado' });
+                }
+            } catch (error: any) {
+                setErrors({ general: error.message || 'Error al crear tipo de pausa personalizado' });
+            } finally {
+                setLoading(false);
+            }
+            return;
+        }
+
+        // Si se ha seleccionado un tipo de pausa predefinido
         if (!selectedBreakType) {
             setErrors({ general: 'Debes seleccionar un tipo de pausa' });
             return;
@@ -341,6 +387,8 @@ const FicharPage: React.FC = () => {
         setShowBreakTypeModal(false);
         setSelectedBreakType(null);
         setBreakReason('');
+        setShowCustomBreakInput(false);
+        setCustomBreakName('');
     };
 
     return (
@@ -420,24 +468,6 @@ const FicharPage: React.FC = () => {
                                         </div>
                                     )}
 
-                                    {/* Mostrar información de la empresa detectada */}
-                                    {companyCode && !selectedCompany && (
-                                        <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                                            <div className="flex">
-                                                <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                                <div className="ml-3">
-                                                    <p className="text-sm text-blue-800">
-                                                        <span className="font-semibold">Fichando en empresa:</span> {companyCode}
-                                                    </p>
-                                                    <p className="text-xs text-blue-600 mt-1">
-                                                        El código de empresa se ha detectado automáticamente desde la URL
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
 
                                 {/* Modal de selección de empresa */}
@@ -561,7 +591,7 @@ const FicharPage: React.FC = () => {
 
                             {/* Panel derecho - Reloj */}
                             <div className="p-8 bg-gradient-to-br from-primary-600 to-indigo-700 flex flex-col justify-center items-center text-white">
-                                <ClockWidget className="text-white" />
+                                <ClockWidget className="text-white" textColor="text-white" />
 
                                 <div className="mt-8 text-center">
                                     <div className="text-sm opacity-90 mb-2">Estado del sistema</div>
@@ -585,7 +615,7 @@ const FicharPage: React.FC = () => {
                     </div>
 
                     <div className="mt-8 text-center text-sm text-gray-500">
-                        <p>© 2024 CompilaTime. Todos los derechos reservados.</p>
+                        <p>© {new Date().getFullYear()} CompilaTime v1.0.0. Todos los derechos reservados.</p>
                     </div>
                 </div>
             </div>
@@ -640,7 +670,55 @@ const FicharPage: React.FC = () => {
                                             </div>
                                         </button>
                                     ))}
+
+                                    {/* Opción para escribir tipo personalizado */}
+                                    <button
+                                        onClick={() => {
+                                            setSelectedBreakType(null);
+                                            setShowCustomBreakInput(true);
+                                        }}
+                                        className={`w-full p-3 rounded-lg border-2 text-left transition-all ${showCustomBreakInput
+                                            ? 'border-primary-500 bg-primary-50'
+                                            : 'border-gray-200 hover:border-gray-300'
+                                            }`}
+                                    >
+                                        <div className="flex items-center space-x-3">
+                                            <div
+                                                className="w-4 h-4 rounded-full"
+                                                style={{ backgroundColor: '#6B7280' }}
+                                            />
+                                            <div className="flex-1">
+                                                <div className="font-medium text-gray-900">✏️ Escribir tipo personalizado</div>
+                                                <div className="text-sm text-gray-600">Escribe un nombre para tu tipo de pausa</div>
+                                            </div>
+                                            {showCustomBreakInput && (
+                                                <svg className="w-5 h-5 text-primary-600" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414-1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                                </svg>
+                                            )}
+                                        </div>
+                                    </button>
                                 </div>
+
+                                {/* Campo para escribir nombre personalizado */}
+                                {showCustomBreakInput && (
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Nombre del tipo de pausa <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={customBreakName}
+                                            onChange={(e) => setCustomBreakName(e.target.value)}
+                                            maxLength={20}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                            placeholder="Ej: Médico, Trámite personal, etc."
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            {customBreakName.length}/20 caracteres
+                                        </p>
+                                    </div>
+                                )}
 
                                 {/* Campo de motivo si el tipo de pausa lo requiere */}
                                 {selectedBreakType?.requiresReason && (
@@ -671,7 +749,7 @@ const FicharPage: React.FC = () => {
                                         onClick={handleBreakTypeConfirm}
                                         loading={loading}
                                         className="flex-1"
-                                        disabled={!selectedBreakType}
+                                        disabled={!selectedBreakType && !showCustomBreakInput}
                                     >
                                         Iniciar Pausa
                                     </Button>

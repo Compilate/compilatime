@@ -664,6 +664,53 @@ class TimeEntryController {
         }
     }
 
+    // Continuar una pausa existente (crear un registro RESUME manual)
+    static async continueBreak(req: Request & { user?: any }, res: Response) {
+        try {
+            const { employeeId, timestamp, source, location, latitude, longitude, isRemoteWork, deviceInfo, notes } = req.body;
+            const companyId = req.user?.companyId;
+
+            if (!companyId) {
+                return res.status(401).json({
+                    success: false,
+                    message: 'No autorizado',
+                });
+            }
+
+            if (!employeeId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'El ID del empleado es requerido',
+                });
+            }
+
+            const timeEntry = await TimeEntryService.continueBreak(
+                companyId,
+                employeeId,
+                timestamp,
+                source,
+                location,
+                latitude,
+                longitude,
+                isRemoteWork,
+                deviceInfo,
+                notes
+            );
+
+            res.status(201).json({
+                success: true,
+                message: 'Pausa continuada exitosamente',
+                data: timeEntry,
+            });
+        } catch (error: any) {
+            console.error('❌ Error en continueBreak:', error);
+            res.status(500).json({
+                success: false,
+                message: error.message || 'Error al continuar la pausa',
+            });
+        }
+    }
+
     // Métodos auxiliares
     private static generateTimeEntriesCSV(timeEntries: any[]): string {
         const headers = [

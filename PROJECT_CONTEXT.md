@@ -3,7 +3,7 @@
 ## Resumen General
 CompilaTime es un SaaS completo para el registro horario de empleados con múltiples roles y funcionalidades avanzadas. El proyecto está dividido en backend (Node.js + Express + TypeScript + Prisma + PostgreSQL + Redis) y frontend (React + TypeScript + Vite + TailwindCSS).
 
-## Estado del Proyecto (Actualizado: 2025-12-28)
+## Estado del Proyecto (Actualizado: 2026-01-02)
 
 ### ✅ Módulos Completados
 
@@ -146,10 +146,13 @@ CompilaTime es un SaaS completo para el registro horario de empleados con múlti
    - Gestión de festivos
 
 7. **Reportes y Estadísticas**
-   - Reportes de asistencia, horas y ausencias
-   - Exportación a CSV y PDF
-   - Dashboard con métricas clave
-   - **COMPLETADO**: Resumen de horas semanales
+    - Reportes de asistencia, horas y ausencias
+    - **COMPLETADO**: Exportación completa a PDF, CSV y Excel para todos los tipos de reporte
+    - Reportes disponibles: time (horas trabajadas), attendance (asistencia), employee-summary (resumen por empleado), monthly (mensual consolidado), delays (retrasos), break-types (tipos de pausa)
+    - Generación de PDFs usando pdfkit con formato profesional
+    - Generación de Excel usando exceljs con tablas y estilos
+    - Generación de CSV con datos estructurados
+    - Dashboard con métricas clave
    - **MEJORADO**: TimelineView con cálculo correcto de horas brutas y netas
 
 8. **Módulo de Superadmin**
@@ -688,21 +691,31 @@ model BreakType {
   active         Boolean    @default(true)
   requiresReason Boolean   @default(false)
   maxMinutes     Int?
+  customName     String?
+  isCustom       Boolean    @default(false)
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
   timeEntries    TimeEntry[]
 }
 ```
+- **COMPLETADO**: Campos `customName` e `isCustom` agregados al modelo BreakType
+  - `customName`: Nombre personalizado para tipos de pausa personalizados (máximo 50 caracteres)
+  - `isCustom`: Indica si el tipo de pausa es personalizado o predefinido
+  - **Migración**: `20251229210138_add_custom_break_type_fields`
 
 #### Servicio BreakTypeService
 - **Ubicación**: `backend/src/modules/breakType/breakType.service.ts`
 - **Funcionalidades**:
   - `createBreakType`: Crear nuevo tipo de pausa
+  - `createCustomBreakType`: Crear tipo de pausa personalizado
   - `getBreakTypes`: Obtener todos los tipos de pausa de una empresa
   - `getBreakTypeById`: Obtener un tipo de pausa por ID
-  - `updateBreakType`: Actualizar un tipo de pausa
+  - `updateBreakType`: Actualizar un tipo de pausa (incluye soporte para customName e isCustom)
   - `deleteBreakType`: Eliminar un tipo de pausa
-  - `getBreakTypeStats`: Obtener estadísticas de tiempo por tipo de pausa
+  - `getBreakTypeStats`: Obtener estadísticas de tiempo por tipo de pausa (incluye displayName para tipos personalizados)
+- **COMPLETADO**: Soporte para tipos de pausa personalizados
+  - Validación de nombres personalizados únicos por empresa
+  - Propiedad `displayName` en estadísticas para mostrar el nombre correcto (personalizado o predefinido)
 - **COMPLETADO**: Manejo de errores con AppError en lugar de Error genérico
     - Importación de `AppError` desde [`errorHandler`](backend/src/middlewares/errorHandler.ts:1)
     - Reemplazo de `new Error()` por `new AppError()` con código de estado HTTP y código de error específico
@@ -715,16 +728,21 @@ model BreakType {
 - **Ubicación**: `backend/src/modules/breakType/breakType.controller.ts`
 - **Endpoints**:
   - `POST /api/break-types`: Crear nuevo tipo de pausa
+  - `POST /api/break-types/custom`: Crear tipo de pausa personalizado
   - `GET /api/break-types`: Obtener todos los tipos de pausa de la empresa
   - `GET /api/break-types/:id`: Obtener un tipo de pausa por ID
   - `PUT /api/break-types/:id`: Actualizar un tipo de pausa
   - `DELETE /api/break-types/:id`: Eliminar un tipo de pausa
   - `GET /api/break-types/stats`: Obtener estadísticas de tiempo por tipo de pausa
+- **COMPLETADO**: Validación Zod para tipos de pausa personalizados
+  - `createCustomBreakTypeSchema`: Validación para crear tipos de pausa personalizados
+  - Validación de longitud máxima de 50 caracteres para `customName`
 
 #### Rutas BreakTypeRoutes
 - **Ubicación**: `backend/src/modules/breakType/breakType.routes.ts`
 - **Rutas**:
   - `/api/break-types`: Todas las rutas de gestión de tipos de pausa
+  - `/api/break-types/custom`: Crear tipo de pausa personalizado
   - Protegidas con middleware de autenticación de empresa
 
 ### Frontend
@@ -734,12 +752,20 @@ model BreakType {
 - **Funcionalidades**:
   - Lista de tipos de pausa con tabla
   - Modal para crear nuevos tipos de pausa
+  - Modal para crear tipos de pausa personalizados
   - Modal para editar tipos de pausa existentes
   - Modal para ver estadísticas de tiempo por tipo de pausa
   - Selector de color HEX con vista previa
   - Configuración de "requiere motivo" y "tiempo máximo"
   - Activación/desactivación de tipos de pausa
   - Formateo de minutos a horas y minutos
+  - **COMPLETADO**: Soporte para tipos de pausa personalizados
+    - Botón "Tipo Personalizado" para crear tipos de pausa personalizados
+    - Modal de creación personalizada con campo `customName` (máximo 50 caracteres)
+    - Indicador visual "Personalizado" en la lista de tipos de pausa
+    - Función `getDisplayName` para mostrar el nombre correcto (personalizado o predefinido)
+    - Campo de edición de nombre personalizado en modal de edición (solo para tipos personalizados)
+    - Contador de caracteres para el nombre personalizado
   - **COMPLETADO**: Ruta directa agregada en [`App.tsx`](frontend/src/App.tsx:181) para `/portal/break-types`
   - **COMPLETADO**: Enlace actualizado en [`ConfiguracionPage`](frontend/src/pages/backoffice/ConfiguracionPage.tsx:822) para usar la ruta correcta `/portal/break-types`
 
@@ -749,9 +775,13 @@ model BreakType {
   - `getBreakTypes`: Obtener todos los tipos de pausa de la empresa
   - `getBreakTypeById`: Obtener un tipo de pausa por ID
   - `createBreakType`: Crear nuevo tipo de pausa
+  - `createCustomBreakType`: Crear tipo de pausa personalizado
   - `updateBreakType`: Actualizar un tipo de pausa
   - `deleteBreakType`: Eliminar un tipo de pausa
   - `getBreakTypeStats`: Obtener estadísticas de tiempo por tipo de pausa
+- **COMPLETADO**: Interfaces TypeScript actualizadas
+  - `BreakType`: Agregados campos `customName`, `isCustom`, `displayName`
+  - `createCustomBreakType`: Nuevo método para crear tipos de pausa personalizados
 
 #### Integración con Fichaje
 - **Ubicación**: `frontend/src/pages/employee/FicharAutenticadoPage.tsx`
@@ -987,3 +1017,121 @@ model BreakType {
        - Los horarios se usan específicos para cada fecha, no los horarios del día seleccionado
        - El frontend compila correctamente sin errores de TypeScript
        - Se está esperando a que el usuario pruebe el cambio para verificar si los horarios se muestran correctamente en días anteriores que tienen fichajes
+
+## Cambios Recientes (2026-01-02)
+
+### Tipos de Pausa Personalizados con Límite de 20 Caracteres
+- **COMPLETADO**: Modificado el límite de caracteres para tipos de pausa personalizados de 10 a 20 caracteres
+- **Ubicación**: [`FicharAutenticadoPage.tsx`](frontend/src/pages/employee/FicharAutenticadoPage.tsx:1)
+- **Cambios Realizados**:
+ - Modificado el campo `customName` en el modal de creación de tipo de pausa personalizado para aceptar hasta 20 caracteres
+ - Actualizado el contador de caracteres para mostrar el límite correcto (20 caracteres)
+ - Actualizada la validación en el backend para aceptar hasta 20 caracteres
+- **Resultado**: Los empleados ahora pueden escribir tipos de pausa personalizados con hasta 20 caracteres
+
+### AUTO_PUNCHOUT en TimeEntrySource
+- **COMPLETADO**: Agregado el valor `AUTO_PUNCHOUT` al enum `TimeEntrySource` en [`schema.prisma`](backend/prisma/schema.prisma:1)
+- **Ubicación**: [`autoPunchout.service.ts`](backend/src/modules/autoPunchout/autoPunchout.service.ts:1)
+- **Cambios Realizados**:
+ - Agregado `AUTO_PUNCHOUT` al enum `TimeEntrySource` en [`schema.prisma`](backend/prisma/schema.prisma:1)
+ - Modificado [`autoPunchout.service.ts`](backend/src/modules/autoPunchout/autoPunchout.service.ts:1) para usar `TimeEntrySource.AUTO_PUNCHOUT` al crear registros de cierre automático
+ - Regenerado el cliente de Prisma para incluir el nuevo valor del enum
+- **Resultado**: Los registros de cierre automático ahora indican `AUTO_PUNCHOUT` como origen en lugar de `API`
+
+### Continuar Pausa en Fichajes Manuales
+- **COMPLETADO**: Implementada funcionalidad para continuar una pausa existente en fichajes manuales
+- **Ubicación**: [`timeEntry.service.ts`](backend/src/modules/timeEntry/timeEntry.service.ts:1), [`TimeEntryEditForm.tsx`](frontend/src/components/backoffice/TimeEntryEditForm.tsx:1), [`TimelineView.tsx`](frontend/src/components/backoffice/TimelineView.tsx:1)
+- **Cambios Realizados**:
+ - Agregado endpoint `POST /api/time-entry/continue-break` en [`timeEntry.controller.ts`](backend/src/modules/timeEntry/timeEntry.controller.ts:1)
+ - Agregado método `continueBreak` en [`timeEntry.service.ts`](backend/src/modules/timeEntry/timeEntry.service.ts:1) para continuar una pausa existente
+ - Agregado botón "Continuar Pausa" en [`TimeEntryEditForm.tsx`](frontend/src/components/backoffice/TimeEntryEditForm.tsx:1) para fichajes manuales (vista de lista)
+ - Agregado botón "Continuar Pausa" en [`TimelineView.tsx`](frontend/src/components/backoffice/TimelineView.tsx:1) para fichajes en la vista de timeline
+ - Agregado modal para seleccionar la fecha y hora de la reanudación de la pausa
+- **Resultado**: Los administradores ahora pueden continuar una pausa que el empleado olvidó reanudar
+
+### Turnos Nocturnos Extendidos hasta las 06:00
+- **COMPLETADO**: Modificada la lógica para extender los turnos nocturnos hasta las 06:00 o hasta la hora predefinida
+- **Ubicación**: [`employee.service.ts`](backend/src/modules/employee/employee.service.ts:1), [`TimelineView.tsx`](frontend/src/components/backoffice/TimelineView.tsx:1)
+- **Cambios Realizados**:
+ - Modificado el método `isTimeEntryWithinSchedule` en [`employee.service.ts`](backend/src/modules/employee/employee.service.ts:1) para verificar si la entrada es antes de las 12:00 y considerarla del día siguiente
+ - Modificado el método `isTimeEntryWithinSchedule` en [`employee.service.ts`](backend/src/modules/employee/employee.service.ts:1) para extender los turnos nocturnos hasta las 06:00 o hasta la hora predefinida
+ - Agregada lógica para verificar los horarios del día anterior para fichajes antes de las 06:00
+- **Resultado**: Los fichajes de salida de turnos nocturnos (antes de las 06:00) ahora se consideran dentro de horario
+
+### Cálculo de Horas Netas para Turnos Nocturnos
+- **COMPLETADO**: Modificado el cálculo de horas netas para manejar correctamente los turnos nocturnos
+- **Ubicación**: [`employee.service.ts`](backend/src/modules/employee/employee.service.ts:1)
+- **Cambios Realizados**:
+ - Modificado el método `calculateNetHours` en [`employee.service.ts`](backend/src/modules/employee/employee.service.ts:1) para incluir registros del día anterior cuando hay un OUT antes de las 06:00
+ - Modificado el método `calculateNetHours` en [`employee.service.ts`](backend/src/modules/employee/employee.service.ts:1) para incluir registros del día siguiente cuando hay un IN o RESUME después de las 22:00
+ - Modificado el método `calculateNetHours` en [`employee.service.ts`](backend/src/modules/employee/employee.service.ts:1) para usar `Math.ceil` en lugar de `Math.round` para asegurar que se cuente al menos 1 minuto para la duración IN a BREAK
+ - Eliminada la lógica que incluía registros del día anterior cuando hay un OUT antes de las 06:00 para evitar contar las mismas horas en ambos días
+- **Resultado**: El cálculo de horas netas ahora maneja correctamente los turnos nocturnos
+
+### Fichajes Antes de las 06:00 que Pertenecen a Turnos Nocturnos del Día Anterior
+- **COMPLETADO**: Modificada la lógica para que los fichajes antes de las 06:00 no se cuenten como fuera de horario cuando pertenecen a un turno nocturno del día anterior
+- **Ubicación**: [`employee.service.ts`](backend/src/modules/employee/employee.service.ts:1), [`TimelineView.tsx`](frontend/src/components/backoffice/TimelineView.tsx:1)
+- **Cambios Realizados**:
+ - Modificado el método `isTimeEntryWithinSchedule` en [`employee.service.ts`](backend/src/modules/employee/employee.service.ts:1) para verificar si el fichaje pertenece a un turno nocturno del día anterior
+ - Modificado el método `isTimeEntryWithinSchedule` en [`employee.service.ts`](backend/src/modules/employee/employee.service.ts:1) para no marcar como fuera de horario si el fichaje pertenece a un turno nocturno del día anterior
+ - Agregada información en el tooltip en [`TimelineView.tsx`](frontend/src/components/backoffice/TimelineView.tsx:1) para indicar que el fichaje pertenece al turno nocturno del día anterior
+ - Modificada la lógica para contar los fichajes fuera de horario en [`TimelineView.tsx`](frontend/src/components/backoffice/TimelineView.tsx:1) para no contar los fichajes que pertenecen a un turno nocturno del día anterior
+- **Resultado**: Los fichajes de salida de turnos nocturnos (antes de las 06:00) ya no se marcan como fuera de horario
+
+### Cálculo de Retrasos Usando WeeklySchedule
+- **COMPLETADO**: Modificado el servicio de reportes de retrasos para usar `WeeklySchedule` en lugar de `EmployeeSchedule`
+- **Ubicación**: [`reports.service.ts`](backend/src/modules/reports/reports.service.ts:1)
+- **Cambios Realizados**:
+ - Modificado el método `getDelayReport` en [`reports.service.ts`](backend/src/modules/reports/reports.service.ts:1) para usar `calculateDelaysWithSchedules` en lugar de `calculateDelays`
+ - Creado el método `calculateDelaysWithSchedules` en [`reports.service.ts`](backend/src/modules/reports/reports.service.ts:1) que obtiene horarios específicos para cada fecha usando `WeeklySchedule`
+ - Modificado el método `calculateDelays` en [`reports.service.ts`](backend/src/modules/reports/reports.service.ts:1) para usar hora UTC en lugar de hora local
+ - Modificado el método `calculateDelays` en [`reports.service.ts`](backend/src/modules/reports/reports.service.ts:1) para convertir las horas de los horarios a UTC antes de compararlas con la hora UTC de los fichajes
+- **Resultado**: El cálculo de retrasos ahora usa los horarios asignados por semana y maneja correctamente los turnos nocturnos
+
+### Formato de Visualización de Retrasos en Horas:Minutos
+- **COMPLETADO**: Modificado el formato de visualización de retrasos en el frontend para mostrar horas:minutos en lugar de horas decimales
+- **Ubicación**: [`ReportesPage.tsx`](frontend/src/pages/backoffice/ReportesPage.tsx:1)
+- **Cambios Realizados**:
+ - Modificada la visualización de retrasos en la tabla "Detalles de Retrasos Individuales" (líneas 735-743) para mostrar formato horas:minutos
+ - Modificada la visualización de retrasos en la tabla "Detalles por Empleado" (líneas 693-700) para mostrar formato horas:minutos
+- **Resultado**: Los retrasos ahora se muestran en formato horas:minutos (ej: 1h 20min) en lugar de horas decimales (ej: 1.33h)
+
+### Corrección de Error de Sintaxis en ReportesPage.tsx
+- **COMPLETADO**: Corregido error de sintaxis en [`ReportesPage.tsx`](frontend/src/pages/backoffice/ReportesPage.tsx:259)
+- **Ubicación**: [`ReportesPage.tsx`](frontend/src/pages/backoffice/ReportesPage.tsx:259)
+- **Cambios Realizados**:
+  - Eliminado paréntesis extra en la línea259 donde se hacía el map sobre `details`
+  - La verificación de `details` ya se hace al inicio de la función [`renderTimeReport`](frontend/src/pages/backoffice/ReportesPage.tsx:204) (líneas208-216), por lo que no era necesario repetirla en el map
+- **Resultado**: El frontend compila correctamente sin errores de sintaxis
+
+### Corrección de Auto-Punchout para Turnos Nocturnos
+- **COMPLETADO**: Corregido el servicio de auto-punchout para que funcione correctamente con turnos nocturnos
+- **Ubicación**: [`autoPunchout.service.ts`](backend/src/modules/autoPunchout/autoPunchout.service.ts:1), [`TimelineView.tsx`](frontend/src/components/backoffice/TimelineView.tsx:1)
+- **Descripción**: El servicio de auto-punchout no funcionaba correctamente para empleados con turnos nocturnos. María tenía una entrada el 1 de enero a las 22:05 y no había hecho la salida. El servicio no creaba la salida automática porque estaba buscando horarios para el día actual en lugar de para el día del fichaje.
+- **Cambios Realizados**:
+  - **Corrección 1**: Modificado el método `processEmployeeAutoPunchout` en [`autoPunchout.service.ts`](backend/src/modules/autoPunchout/autoPunchout.service.ts:128) para usar `entryDate` en lugar de `today` al buscar horarios del empleado
+    - **Problema**: El servicio estaba buscando horarios para "hoy" en lugar de para el día del fichaje
+    - **Causa**: El servicio usaba `const today = new Date().toISOString().split('T')[0]` para buscar horarios, lo que causaba que buscara horarios para el día actual en lugar de para el día del fichaje
+    - **Solución**: Modificar el código para usar `const entryDate = entryTime.toISOString().split('T')[0]` en lugar de `today` al buscar horarios
+    - **Resultado**: El servicio ahora busca horarios para el día del fichaje, lo que permite que funcione correctamente con turnos nocturnos
+  - **Corrección 2**: Modificado el método `processScheduleAutoPunchout` en [`autoPunchout.service.ts`](backend/src/modules/autoPunchout/autoPunchout.service.ts:172) para usar `entryDate` en lugar de `today` al crear las fechas del turno
+    - **Problema**: El servicio estaba creando las fechas del turno usando "hoy" en lugar de la fecha del fichaje
+    - **Causa**: El servicio usaba `const today = new Date().toISOString().split('T')[0]` para crear las fechas del turno, lo que causaba que creara las fechas incorrectas para turnos nocturnos
+    - **Solución**: Modificar el código para usar `const entryDate = entryTime.toISOString().split('T')[0]` en lugar de `today` al crear las fechas del turno
+    - **Resultado**: El servicio ahora crea las fechas del turno correctamente, lo que permite que funcione correctamente con turnos nocturnos
+  - **Corrección 3**: Creada migración de Prisma para agregar `AUTO_PUNCHOUT` al enum `TimeEntrySource`
+    - **Problema**: El valor `AUTO_PUNCHOUT` no existía en la base de datos, lo que causaba un error al crear registros de cierre automático
+    - **Causa**: El enum `TimeEntrySource` en el esquema de Prisma tenía el valor `AUTO_PUNCHOUT`, pero no existía en la base de datos
+    - **Solución**: Crear migración de Prisma para agregar `AUTO_PUNCHOUT` al enum `TimeEntrySource` en la base de datos
+    - **Resultado**: Los registros de cierre automático ahora indican `AUTO_PUNCHOUT` como origen en lugar de `API`
+  - **Corrección 4**: Modificada la lógica en [`TimelineView.tsx`](frontend/src/components/backoffice/TimelineView.tsx:1246) para que los fichajes OUT de auto-punchout no se marquen como fuera de horario cuando pertenecen a un turno nocturno del día anterior
+    - **Problema**: Los fichajes OUT de auto-punchout se marcaban como fuera de horario en el timeline, incluso cuando pertenecían a un turno nocturno del día anterior
+    - **Causa**: La lógica para contar los fichajes fuera de horario no verificaba si el fichaje OUT pertenecía a un turno nocturno del día anterior
+    - **Solución**: Modificar la lógica para verificar si el fichaje es de tipo OUT y si hay un IN o RESUME el día anterior que pertenece a un turno nocturno (después de las 22:00). Si es así, se marca el fichaje OUT como perteneciente al turno nocturno del día anterior y no se cuenta como fuera de horario
+    - **Resultado**: Los fichajes OUT de auto-punchout ya no se marcan como fuera de horario cuando pertenecen a un turno nocturno del día anterior
+- **Resultado**: El servicio de auto-punchout ahora funciona correctamente con turnos nocturnos y los fichajes de salida automática no se marcan como fuera de horario en el timeline
+- **Notas Importantes**:
+  - El servicio ahora busca horarios para el día del fichaje, no para el día actual
+  - El servicio ahora crea las fechas del turno usando la fecha del fichaje, no la fecha actual
+  - Los fichajes OUT de auto-punchout ya no se marcan como fuera de horario cuando pertenecen a un turno nocturno del día anterior
+  - El backend y el frontend compilan correctamente sin errores

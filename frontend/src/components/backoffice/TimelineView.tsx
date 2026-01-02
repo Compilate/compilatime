@@ -20,6 +20,8 @@ interface TimeEntry {
         name: string;
         color: string;
         description?: string;
+        customName?: string;
+        isCustom?: boolean;
     };
     breakReason?: string;
 }
@@ -62,6 +64,11 @@ const TimelineView: React.FC<TimelineViewProps> = ({ date, employeeId, employees
     });
     const [submittingPunch, setSubmittingPunch] = useState(false);
     const [punchError, setPunchError] = useState<string | null>(null);
+    const [continuingBreak, setContinuingBreak] = useState(false);
+    const [continueBreakError, setContinueBreakError] = useState<string | null>(null);
+    const [showContinueBreakModal, setShowContinueBreakModal] = useState(false);
+    const [selectedBreakEntry, setSelectedBreakEntry] = useState<TimeEntry | null>(null);
+    const [continueBreakTimestamp, setContinueBreakTimestamp] = useState('');
 
     // Generar horas del día (0-23)
     const hours = Array.from({ length: 24 }, (_, i) => i);
@@ -269,12 +276,6 @@ const TimelineView: React.FC<TimelineViewProps> = ({ date, employeeId, employees
         }
     };
 
-    // Convertir hora a posición en la línea de tiempo (porcentaje)
-    const timeToPosition = (timeString: string): number => {
-        const [hours, minutes] = timeString.split(':').map(Number);
-        return ((hours * 60 + minutes) / (24 * 60)) * 100;
-    };
-
     // Convertir hora a posición en la línea de tiempo (porcentaje) usando hora UTC
     const timeToPositionUTC = (timeString: string): number => {
         const [hours, minutes] = timeString.split(':').map(Number);
@@ -333,29 +334,90 @@ const TimelineView: React.FC<TimelineViewProps> = ({ date, employeeId, employees
     const calculateNetHours = (entries: TimeEntry[]): number => {
         let totalMinutes = 0;
         let lastEntryTime: Date | null = null;
+        let lastEntryType: string | null = null;
 
         const sortedEntries = [...entries].sort((a, b) =>
             new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
         );
 
+        console.log('🔍 DEBUG calculateNetHours - entries recibidos:', entries.map(e => ({
+            id: e.id,
+            type: e.type,
+            timestamp: e.timestamp,
+            date: new Date(e.timestamp).toISOString().split('T')[0],
+            hour: new Date(e.timestamp).getHours()
+        })));
+
         for (const entry of sortedEntries) {
             const entryTime = new Date(entry.timestamp);
 
+            console.log('🔍 DEBUG calculateNetHours - procesando entry:', {
+                id: entry.id,
+                type: entry.type,
+                timestamp: entry.timestamp,
+                lastEntryTime: lastEntryTime?.toISOString(),
+                lastEntryType,
+                totalMinutes
+            });
+
             if (entry.type === 'IN') {
+                // Si ya hay un IN pendiente, contar hasta este IN (cierre implícito)
+                if (lastEntryTime && lastEntryType === 'IN') {
+                    const duration = Math.round((entryTime.getTime() - lastEntryTime.getTime()) / (1000 * 60));
+                    console.log('🔍 DEBUG calculateNetHours - IN con IN pendiente, duration:', duration);
+                    totalMinutes += Math.max(0, duration);
+                }
                 lastEntryTime = entryTime;
-            } else if (entry.type === 'OUT' && lastEntryTime) {
-                const duration = Math.round((entryTime.getTime() - lastEntryTime.getTime()) / (1000 * 60));
-                totalMinutes += Math.max(0, duration);
-                lastEntryTime = null;
+                lastEntryType = 'IN';
+            } else if (entry.type === 'OUT') {
+                if (lastEntryTime && lastEntryType === 'IN') {
+                    const duration = Math.round((entryTime.getTime() - lastEntryTime.getTime()) / (1000 * 60));
+                    console.log('🔍 DEBUG calculateNetHours - OUT con IN pendiente, duration:', duration);
+                    totalMinutes += Math.max(0, duration);
+                    lastEntryTime = null;
+                    lastEntryType = null;
+                } else {
+                    // OUT sin IN previo, ignorar
+                    console.log('🔍 DEBUG calculateNetHours - OUT sin IN previo, ignorando');
+                }
+            } else if (entry.type === 'BREAK') {
+                // Si hay un IN pendiente, contar hasta el BREAK
+                if (lastEntryTime && lastEntryType === 'IN') {
+                    const duration = Math.round((entryTime.getTime() - lastEntryTime.getTime()) / (1000 * 60));
+                    console.log('🔍 DEBUG calculateNetHours - BREAK con IN pendiente, duration:', duration);
+                    // Usar Math.ceil en lugar de Math.round para asegurar que se cuente al menos 1 minuto
+                    totalMinutes += Math.max(1, Math.ceil(duration));
+                    lastEntryTime = entryTime;
+                    lastEntryType = 'BREAK';
+                } else {
+                    // BREAK sin IN previo, ignorar
+                    console.log('🔍 DEBUG calculateNetHours - BREAK sin IN previo, ignorando');
+                    lastEntryTime = entryTime;
+                    lastEntryType = 'BREAK';
+                }
+            } else if (entry.type === 'RESUME') {
+                // RESUME marca el fin de la pausa, pero no añade tiempo trabajado
+                if (lastEntryTime && lastEntryType === 'BREAK') {
+                    lastEntryTime = entryTime;
+                    lastEntryType = 'IN';
+                    console.log('🔍 DEBUG calculateNetHours - RESUME, marcando como IN');
+                } else {
+                    // RESUME sin BREAK previo, tratar como IN
+                    lastEntryTime = entryTime;
+                    lastEntryType = 'IN';
+                    console.log('🔍 DEBUG calculateNetHours - RESUME sin BREAK previo, tratando como IN');
+                }
             }
         }
 
         // Si hay una entrada sin salida, contar hasta la hora actual
-        if (lastEntryTime && lastEntryTime < new Date()) {
+        if (lastEntryTime && lastEntryType === 'IN' && lastEntryTime < new Date()) {
             const duration = Math.round((new Date().getTime() - lastEntryTime.getTime()) / (1000 * 60));
+            console.log('🔍 DEBUG calculateNetHours - IN sin salida, duration hasta ahora:', duration);
             totalMinutes += Math.max(0, duration);
         }
 
+        console.log('🔍 DEBUG calculateNetHours - totalMinutes final:', totalMinutes);
         return totalMinutes;
     };
 
@@ -421,11 +483,11 @@ const TimelineView: React.FC<TimelineViewProps> = ({ date, employeeId, employees
     };
 
     // Obtener tipo de fichaje
-    const getTypeLabel = (type: string, breakType?: { name: string; color: string }) => {
+    const getTypeLabel = (type: string, breakType?: { name: string; color: string; customName?: string; isCustom?: boolean }) => {
         const types = {
             'IN': 'Entrada',
             'OUT': 'Salida',
-            'BREAK': breakType ? breakType.name : 'Pausa',
+            'BREAK': breakType ? (breakType.isCustom && breakType.customName ? breakType.customName : breakType.name) : 'Pausa',
             'RESUME': 'Reanudar',
         };
         return types[type as keyof typeof types] || type;
@@ -469,12 +531,25 @@ const TimelineView: React.FC<TimelineViewProps> = ({ date, employeeId, employees
             // Si el turno cruza medianoche
             if (endMinutes < startMinutes) {
                 endMinutes += 24 * 60; // Añadir 24 horas
-                // Para el fichaje, si es antes de mediodía, considerarlo del día siguiente
+
+                // Para turnos nocturnos, extender el turno hasta las 06:00 (360 minutos) o hasta la hora predefinida
+                // La hora predefinida del turno es endMinutes - 24 * 60 (que es la hora original del día siguiente)
+                const predefinedEndMinutes = endMinutes - 24 * 60;
+                const extendedEndMinutes = Math.max(predefinedEndMinutes, 360); // 360 minutos = 06:00
+
+                // Si la hora predefinida es mayor que 06:00, usar la hora predefinida
+                const finalEndMinutes = Math.max(endMinutes, extendedEndMinutes + 24 * 60);
+
+                // Para el fichaje, verificar si está dentro del rango extendido del turno nocturno
+                // El turno nocturno abarca desde el día anterior hasta el día siguiente
                 let adjustedEntryMinutes = entryTotalMinutes;
-                if (entryTotalMinutes < startMinutes) {
+
+                // Si el fichaje es antes de las 06:00, considerarlo del día siguiente
+                if (entryHours < 6) {
                     adjustedEntryMinutes += 24 * 60;
                 }
-                return adjustedEntryMinutes >= startMinutes && adjustedEntryMinutes <= endMinutes;
+
+                return adjustedEntryMinutes >= startMinutes && adjustedEntryMinutes <= finalEndMinutes;
             } else {
                 // Turno normal
                 return entryTotalMinutes >= startMinutes && entryTotalMinutes <= endMinutes;
@@ -627,6 +702,34 @@ const TimelineView: React.FC<TimelineViewProps> = ({ date, employeeId, employees
         });
         setShowManualPunch(true);
         setPunchError(null);
+    };
+
+    // Función para continuar una pausa existente
+    const handleContinueBreak = async (entry: TimeEntry, timestamp?: string) => {
+        if (!entry.employee) {
+            setContinueBreakError('No se puede continuar la pausa: empleado no encontrado');
+            return;
+        }
+
+        try {
+            setContinuingBreak(true);
+            setContinueBreakError(null);
+
+            await timeEntryApi.continueBreak({
+                employeeId: entry.employee.id,
+                timestamp: timestamp || new Date().toISOString(),
+                source: 'ADMIN',
+                notes: 'Reanudación manual de pausa',
+            });
+
+            await loadData();
+            setShowContinueBreakModal(false);
+            setSelectedBreakEntry(null);
+        } catch (error: any) {
+            setContinueBreakError(error.message || 'Error al continuar la pausa');
+        } finally {
+            setContinuingBreak(false);
+        }
     };
 
     if (loading) {
@@ -826,9 +929,70 @@ const TimelineView: React.FC<TimelineViewProps> = ({ date, employeeId, employees
                                                             {/* Registros de fichaje para esta fecha */}
                                                             {entriesForDate.map(entry => {
                                                                 const position = timestampToPosition(entry.timestamp);
-                                                                const schedulesForDate = (window as any).schedulesByDateAndEmployee?.[employee.id]?.[dateString] || [];
+                                                                const entryTime = new Date(entry.timestamp);
+                                                                const entryHour = entryTime.getHours();
+
+                                                                // Si el fichaje es antes de las 06:00, verificar también los horarios del día anterior
+                                                                let schedulesForDate = (window as any).schedulesByDateAndEmployee?.[employee.id]?.[dateString] || [];
+                                                                let belongsToPreviousNightShift = false; // Para indicar si pertenece a un turno nocturno del día anterior
+
+                                                                // Verificar si el fichaje pertenece a un turno nocturno del día anterior
+                                                                // Caso 1: Fichaje antes de las 06:00 (puede ser parte de un turno nocturno del día anterior)
+                                                                // Caso 2: Fichaje de tipo OUT y hay un turno nocturno el día anterior (puede ser el cierre de un turno nocturno)
+                                                                const previousDay = new Date(entryTime);
+                                                                previousDay.setDate(previousDay.getDate() - 1);
+                                                                const previousDateString = previousDay.toISOString().split('T')[0];
+                                                                const previousDaySchedules = (window as any).schedulesByDateAndEmployee?.[employee.id]?.[previousDateString] || [];
+
+                                                                // Verificar si hay un turno nocturno el día anterior
+                                                                const hasNightShiftPreviousDay = previousDaySchedules.some((schedule: Schedule) => {
+                                                                    const [startHour] = schedule.startTime.split(':').map(Number);
+                                                                    const [endHour] = schedule.endTime.split(':').map(Number);
+                                                                    return endHour < startHour; // Turno que cruza medianoche
+                                                                });
+
+                                                                console.log(`🔍 DEBUG render - Verificando si pertenece a turno nocturno del día anterior:`, {
+                                                                    entryId: entry.id,
+                                                                    entryType: entry.type,
+                                                                    entryTimestamp: entry.timestamp,
+                                                                    entryHour,
+                                                                    dateString,
+                                                                    previousDateString,
+                                                                    hasNightShiftPreviousDay,
+                                                                    schedulesForDateCurrent: schedulesForDate,
+                                                                    previousDaySchedules
+                                                                });
+
+                                                                // Si hay un turno nocturno el día anterior, verificar si este fichaje pertenece a ese turno
+                                                                if (hasNightShiftPreviousDay) {
+                                                                    // Caso 1: Fichaje antes de las 06:00 (puede ser parte de un turno nocturno del día anterior)
+                                                                    if (entryHour < 6) {
+                                                                        belongsToPreviousNightShift = true;
+                                                                        // Usar solo los horarios del día anterior para verificar si está dentro de horario
+                                                                        schedulesForDate = previousDaySchedules;
+                                                                        console.log(`🔍 DEBUG render - Fichaje antes de las 06:00 con turno nocturno anterior, marcando como belongsToPreviousNightShift`);
+                                                                    }
+                                                                    // Caso 2: Fichaje de tipo OUT y puede ser el cierre de un turno nocturno del día anterior
+                                                                    else if (entry.type === 'OUT') {
+                                                                        // Verificar si hay un IN o RESUME el día anterior que pertenece al turno nocturno
+                                                                        const previousDayEntries = entriesByEmployeeAndDate[employee.id]?.[previousDateString] || [];
+                                                                        const hasNightShiftEntryPreviousDay = previousDayEntries.some((e: TimeEntry) => {
+                                                                            const eHour = new Date(e.timestamp).getHours();
+                                                                            return (e.type === 'IN' || e.type === 'RESUME') && eHour >= 22;
+                                                                        });
+
+                                                                        if (hasNightShiftEntryPreviousDay) {
+                                                                            belongsToPreviousNightShift = true;
+                                                                            // Usar solo los horarios del día anterior para verificar si está dentro de horario
+                                                                            schedulesForDate = previousDaySchedules;
+                                                                            console.log(`🔍 DEBUG render - Fichaje OUT con IN/RESUME nocturno anterior, marcando como belongsToPreviousNightShift`);
+                                                                        }
+                                                                    }
+                                                                }
+
                                                                 const isWithinSchedule = isTimeEntryWithinSchedule(entry, schedulesForDate);
-                                                                const isOutsideSchedule = !isWithinSchedule && schedulesForDate.length > 0;
+                                                                // Si pertenece a un turno nocturno del día anterior, no marcar como fuera de horario
+                                                                const isOutsideSchedule = !isWithinSchedule && schedulesForDate.length > 0 && !belongsToPreviousNightShift;
 
                                                                 // Calcular tiempo de retraso para fichajes IN fuera de horario
                                                                 let delayMinutes: number | null = null;
@@ -846,7 +1010,6 @@ const TimelineView: React.FC<TimelineViewProps> = ({ date, employeeId, employees
                                                                     const [scheduleStartHour, scheduleStartMinute] = earliestSchedule.startTime.split(':').map(Number);
                                                                     const scheduleStartMinutes = scheduleStartHour * 60 + scheduleStartMinute;
 
-                                                                    const entryTime = new Date(entry.timestamp);
                                                                     const entryMinutes = entryTime.getHours() * 60 + entryTime.getMinutes();
 
                                                                     // Calcular el retraso
@@ -856,7 +1019,6 @@ const TimelineView: React.FC<TimelineViewProps> = ({ date, employeeId, employees
                                                                 }
 
                                                                 const entryDate = new Date(entry.timestamp).toISOString().split('T')[0];
-                                                                const entryHour = new Date(entry.timestamp).getHours();
 
                                                                 console.log(`🔍 DEBUG render - Renderizando entry ${entry.id} (${entry.type}) en fecha ${dateString}:`, {
                                                                     entryTimestamp: entry.timestamp,
@@ -873,7 +1035,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ date, employeeId, employees
                                                                 return (
                                                                     <div
                                                                         key={`entry-${entry.id}-${dateString}`}
-                                                                        className={`absolute top-0 bottom-0 w-3 rounded-full ${getTypeColor(entry.type)} border-2 border-white shadow-sm transform -translate-x-1/2 cursor-pointer hover:scale-125 transition-transform ${isOutsideSchedule ? 'ring-2 ring-red-400 ring-offset-1' : ''}`}
+                                                                        className={`group absolute top-0 bottom-0 w-3 rounded-full ${getTypeColor(entry.type)} border-2 border-white shadow-sm transform -translate-x-1/2 cursor-pointer hover:scale-125 transition-transform ${isOutsideSchedule ? 'ring-2 ring-red-400 ring-offset-1' : ''}`}
                                                                         style={{ left: `${position}%` }}
                                                                         title={`${getTypeLabel(entry.type)}: ${new Date(entry.timestamp).toLocaleTimeString('es-ES')}${isOutsideSchedule ? ' (FUERA DE HORARIO)' : ''}${delayMinutes !== null ? ` (Retraso: ${formatMinutes(delayMinutes)})` : ''}`}
                                                                     >
@@ -887,14 +1049,46 @@ const TimelineView: React.FC<TimelineViewProps> = ({ date, employeeId, employees
                                                                             <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-orange-500 rounded-full border border-white animate-pulse"></div>
                                                                         )}
 
-                                                                        <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap opacity-0 hover:opacity-100 transition-opacity z-10">
+                                                                        {/* Botón para continuar pausa (solo para registros de tipo BREAK) */}
+                                                                        {entry.type === 'BREAK' && (
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.preventDefault();
+                                                                                    e.stopPropagation();
+                                                                                    console.log('🔍 DEBUG - Click en botón continuar pausa para entry:', entry.id);
+                                                                                    setSelectedBreakEntry(entry);
+                                                                                    setContinueBreakTimestamp(new Date().toISOString().slice(0, 16));
+                                                                                    setShowContinueBreakModal(true);
+                                                                                }}
+                                                                                disabled={continuingBreak}
+                                                                                className="absolute -top-3 -right-3 w-5 h-5 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center text-xs font-bold shadow-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed z-30"
+                                                                                title="Continuar Pausa"
+                                                                                type="button"
+                                                                            >
+                                                                                {continuingBreak ? '...' : '▶'}
+                                                                            </button>
+                                                                        )}
+
+                                                                        <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
                                                                             {getTypeLabel(entry.type, entry.breakType)}
+                                                                            {entry.breakType?.isCustom && (
+                                                                                <>
+                                                                                    <br />
+                                                                                    <span className="text-yellow-300">✏️ Tipo personalizado</span>
+                                                                                </>
+                                                                            )}
                                                                             <br />
                                                                             {new Date(entry.timestamp).toLocaleTimeString('es-ES')}
                                                                             <br />
                                                                             <span className="text-xs text-gray-400">
                                                                                 Fecha: {entryDate} | Container: {dateString}
                                                                             </span>
+                                                                            {belongsToPreviousNightShift && (
+                                                                                <>
+                                                                                    <br />
+                                                                                    <span className="text-purple-300 font-semibold">🌙 Pertenece al turno nocturno del día anterior</span>
+                                                                                </>
+                                                                            )}
                                                                             {isOutsideSchedule && (
                                                                                 <>
                                                                                     <br />
@@ -905,6 +1099,12 @@ const TimelineView: React.FC<TimelineViewProps> = ({ date, employeeId, employees
                                                                                 <>
                                                                                     <br />
                                                                                     <span className="text-orange-300 font-semibold">⏰ Retraso: {formatMinutes(delayMinutes)}</span>
+                                                                                </>
+                                                                            )}
+                                                                            {entry.type === 'BREAK' && (
+                                                                                <>
+                                                                                    <br />
+                                                                                    <span className="text-blue-300 font-semibold">▶ Click para continuar</span>
                                                                                 </>
                                                                             )}
                                                                         </div>
@@ -932,7 +1132,14 @@ const TimelineView: React.FC<TimelineViewProps> = ({ date, employeeId, employees
                                                                         <div className={`w-3 h-3 rounded-full ${getTypeColor(type)}`} />
                                                                         <span className="text-xs text-gray-600">
                                                                             {type === 'BREAK' && entriesForDate.find(e => e.type === 'BREAK')?.breakType
-                                                                                ? getTypeLabel(type, entriesForDate.find(e => e.type === 'BREAK')?.breakType)
+                                                                                ? (
+                                                                                    <>
+                                                                                        {getTypeLabel(type, entriesForDate.find(e => e.type === 'BREAK')?.breakType)}
+                                                                                        {entriesForDate.find(e => e.type === 'BREAK')?.breakType?.isCustom && (
+                                                                                            <span className="ml-1">✏️</span>
+                                                                                        )}
+                                                                                    </>
+                                                                                )
                                                                                 : getTypeLabel(type)}
                                                                         </span>
                                                                     </div>
@@ -968,7 +1175,36 @@ const TimelineView: React.FC<TimelineViewProps> = ({ date, employeeId, employees
                                                                 <div className="flex items-center space-x-1">
                                                                     <span className="font-medium">Horas netas:</span>
                                                                     <span className="bg-green-100 text-green-800 px-2 py-1 rounded">
-                                                                        {formatMinutes(calculateNetHours(entriesForDate))}
+                                                                        {(() => {
+                                                                            // Para turnos nocturnos, incluir registros del día siguiente cuando hay un IN o RESUME después de las 22:00
+                                                                            // NO incluir registros del día anterior cuando hay un OUT antes de las 06:00 (para evitar contar las mismas horas en ambos días)
+                                                                            let entriesForNetHours = [...entriesForDate];
+
+                                                                            // Verificar si hay un IN o RESUME después de las 22:00 (turno nocturno que continúa al día siguiente)
+                                                                            const hasLateEntry = entriesForDate.some(e => {
+                                                                                const hour = new Date(e.timestamp).getHours();
+                                                                                return (e.type === 'IN' || e.type === 'RESUME') && hour >= 22;
+                                                                            });
+
+                                                                            if (hasLateEntry) {
+                                                                                // Incluir registros del día siguiente (especialmente el OUT)
+                                                                                const nextDay = new Date(dateString);
+                                                                                nextDay.setDate(nextDay.getDate() + 1);
+                                                                                const nextDateString = nextDay.toISOString().split('T')[0];
+                                                                                const nextDayEntries = entriesByEmployeeAndDate[employee.id]?.[nextDateString] || [];
+                                                                                entriesForNetHours = [...entriesForNetHours, ...nextDayEntries];
+
+                                                                                console.log('🔍 DEBUG Horas netas - Incluyendo registros del día siguiente:', {
+                                                                                    dateString,
+                                                                                    nextDateString,
+                                                                                    nextDayEntries: nextDayEntries.length,
+                                                                                    entriesForDate: entriesForDate.length,
+                                                                                    entriesForNetHours: entriesForNetHours.length
+                                                                                });
+                                                                            }
+
+                                                                            return formatMinutes(calculateNetHours(entriesForNetHours));
+                                                                        })()}
                                                                     </span>
                                                                 </div>
 
@@ -1027,10 +1263,56 @@ const TimelineView: React.FC<TimelineViewProps> = ({ date, employeeId, employees
                                                                     <div className="flex items-center space-x-1">
                                                                         <span className="font-medium">Fuera de horario:</span>
                                                                         {(() => {
-                                                                            const schedulesForDate = (window as any).schedulesByDateAndEmployee?.[employee.id]?.[dateString] || [];
-                                                                            const outsideScheduleCount = entriesForDate.filter(entry =>
-                                                                                !isTimeEntryWithinSchedule(entry, schedulesForDate)
-                                                                            ).length;
+                                                                            const outsideScheduleCount = entriesForDate.filter(entry => {
+                                                                                const entryTime = new Date(entry.timestamp);
+                                                                                const entryHour = entryTime.getHours();
+                                                                                const entryType = entry.type;
+
+                                                                                // Verificar si pertenece a un turno nocturno del día anterior
+                                                                                // Caso 1: Fichaje antes de las 06:00 (puede ser parte de un turno nocturno del día anterior)
+                                                                                // Caso 2: Fichaje de tipo OUT y puede ser el cierre de un turno nocturno del día anterior
+                                                                                let belongsToPreviousNightShift = false;
+
+                                                                                const previousDay = new Date(entryTime);
+                                                                                previousDay.setDate(previousDay.getDate() - 1);
+                                                                                const previousDateString = previousDay.toISOString().split('T')[0];
+                                                                                const previousDaySchedules = (window as any).schedulesByDateAndEmployee?.[employee.id]?.[previousDateString] || [];
+
+                                                                                // Verificar si hay un turno nocturno el día anterior
+                                                                                const hasNightShiftPreviousDay = previousDaySchedules.some((schedule: Schedule) => {
+                                                                                    const [startHour] = schedule.startTime.split(':').map(Number);
+                                                                                    const [endHour] = schedule.endTime.split(':').map(Number);
+                                                                                    return endHour < startHour; // Turno que cruza medianoche
+                                                                                });
+
+                                                                                // Caso 1: Fichaje antes de las 06:00 (puede ser parte de un turno nocturno del día anterior)
+                                                                                if (entryHour < 6) {
+                                                                                    belongsToPreviousNightShift = true;
+                                                                                }
+                                                                                // Caso 2: Fichaje de tipo OUT y hay un turno nocturno el día anterior (puede ser el cierre de un turno nocturno)
+                                                                                else if (entryType === 'OUT' && hasNightShiftPreviousDay) {
+                                                                                    // Verificar si hay un IN o RESUME el día anterior que pertenece al turno nocturno
+                                                                                    const previousDayEntries = entriesByEmployeeAndDate[employee.id]?.[previousDateString] || [];
+                                                                                    const hasNightShiftEntryPreviousDay = previousDayEntries.some((e: TimeEntry) => {
+                                                                                        const eHour = new Date(e.timestamp).getHours();
+                                                                                        return (e.type === 'IN' || e.type === 'RESUME') && eHour >= 22;
+                                                                                    });
+
+                                                                                    if (hasNightShiftEntryPreviousDay) {
+                                                                                        belongsToPreviousNightShift = true;
+                                                                                    }
+                                                                                }
+
+                                                                                // Si pertenece a un turno nocturno del día anterior, no contar como fuera de horario
+                                                                                if (belongsToPreviousNightShift) {
+                                                                                    return false;
+                                                                                }
+
+                                                                                // Verificar si está fuera de horario usando los horarios del día actual
+                                                                                const schedulesForDate = (window as any).schedulesByDateAndEmployee?.[employee.id]?.[dateString] || [];
+                                                                                return !isTimeEntryWithinSchedule(entry, schedulesForDate);
+                                                                            }).length;
+
                                                                             return outsideScheduleCount > 0 ? (
                                                                                 <span className="bg-red-100 text-red-800 px-2 py-1 rounded flex items-center space-x-1">
                                                                                     <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
@@ -1229,6 +1511,130 @@ const TimelineView: React.FC<TimelineViewProps> = ({ date, employeeId, employees
                             </Button>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* Modal para continuar pausa */}
+            {showContinueBreakModal && selectedBreakEntry && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold text-gray-900">
+                                Continuar Pausa
+                            </h3>
+                            <button
+                                onClick={() => {
+                                    setShowContinueBreakModal(false);
+                                    setSelectedBreakEntry(null);
+                                    setContinueBreakError(null);
+                                }}
+                                className="text-gray-400 hover:text-gray-600 transition-colors"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        {continueBreakError && (
+                            <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded">
+                                {continueBreakError}
+                            </div>
+                        )}
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Empleado
+                                </label>
+                                <div className="text-sm text-gray-600">
+                                    {selectedBreakEntry.employee.name} ({selectedBreakEntry.employee.dni})
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Tipo de Pausa
+                                </label>
+                                <div className="text-sm text-gray-600">
+                                    {selectedBreakEntry.breakType?.name || 'Pausa'}
+                                    {selectedBreakEntry.breakType?.isCustom && (
+                                        <span className="ml-2 text-yellow-600">
+                                            ({selectedBreakEntry.breakType.customName})
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Fecha y Hora de la Pausa
+                                </label>
+                                <div className="text-sm text-gray-600">
+                                    {new Date(selectedBreakEntry.timestamp).toLocaleString('es-ES')}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Fecha y Hora de Reanudación
+                                </label>
+                                <input
+                                    type="datetime-local"
+                                    value={continueBreakTimestamp}
+                                    onChange={(e) => setContinueBreakTimestamp(e.target.value)}
+                                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end space-x-3 mt-6">
+                            <Button
+                                variant="secondary"
+                                onClick={() => {
+                                    setShowContinueBreakModal(false);
+                                    setSelectedBreakEntry(null);
+                                    setContinueBreakError(null);
+                                }}
+                                disabled={continuingBreak}
+                            >
+                                Cancelar
+                            </Button>
+                            <Button
+                                variant="primary"
+                                onClick={() => handleContinueBreak(selectedBreakEntry, continueBreakTimestamp)}
+                                disabled={continuingBreak}
+                                className="flex items-center space-x-2"
+                            >
+                                {continuingBreak && (
+                                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3.7.938l3-2.647z"></path>
+                                    </svg>
+                                )}
+                                <span>{continuingBreak ? 'Continuando...' : 'Continuar Pausa'}</span>
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Mensaje de error para continuar pausa */}
+            {continueBreakError && (
+                <div className="fixed bottom-4 right-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded shadow-lg z-50 flex items-center space-x-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>{continueBreakError}</span>
+                    <button
+                        onClick={() => setContinueBreakError(null)}
+                        className="ml-2 text-red-400 hover:text-red-600"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
                 </div>
             )}
         </div>
