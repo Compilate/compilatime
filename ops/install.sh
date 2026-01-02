@@ -90,6 +90,7 @@ DB_USER="rafa"
 DB_PASSWORD="C0mp1l@te"
 BACKEND_PORT="4000"
 FRONTEND_URL="http://localhost:3000"
+REPO_URL=""
 SKIP_DEPS=false
 SKIP_BUILD=false
 DEV_MODE=false
@@ -123,6 +124,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --frontend-url)
             FRONTEND_URL="$2"
+            shift 2
+            ;;
+        --repo-url)
+            REPO_URL="$2"
             shift 2
             ;;
         --skip-deps)
@@ -303,36 +308,47 @@ log_success "Directorio del proyecto creado: $PROJECT_DIR"
 echo ""
 
 ################################################################################
-# 4. Copiar el proyecto
+# 4. Clonar o actualizar el proyecto con Git
 ################################################################################
-log_info "Paso 4: Copiando el proyecto..."
+log_info "Paso 4: Clonando o actualizando el proyecto con Git..."
 
 # Verificar si el directorio ya existe
-if [ -d "$PROJECT_DIR/backend" ] && [ -d "$PROJECT_DIR/frontend" ]; then
-    log_warning "El proyecto ya existe en $PROJECT_DIR"
+if [ -d "$PROJECT_DIR/.git" ]; then
+    log_info "El proyecto ya existe en $PROJECT_DIR"
     read -p "¿Desea actualizar el proyecto existente? (y/n): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         log_info "Actualizando proyecto..."
         cd "$PROJECT_DIR"
-        git pull origin master || log_warning "No se pudo actualizar el proyecto (continuando...)"
+        git fetch origin
+        git reset --hard origin/master || log_warning "No se pudo actualizar el proyecto (continuando...)"
+        log_success "Proyecto actualizado"
     else
         log_info "Usando proyecto existente"
     fi
 else
-    log_info "Copiando archivos del proyecto..."
+    log_info "Clonando proyecto desde Git..."
     
-    # Copiar el proyecto desde el directorio actual
-    if [ -d "./backend" ] && [ -d "./frontend" ]; then
-        log_info "Copiando archivos del proyecto..."
-        cp -r . "$PROJECT_DIR/"
-        chown -R compilatime:compilatime "$PROJECT_DIR"
-        log_success "Proyecto copiado a $PROJECT_DIR"
-    else
-        log_error "No se encontraron los directorios backend y frontend en el directorio actual"
-        log_error "Por favor, ejecuta este script desde el directorio raíz del proyecto"
+    # Verificar si se proporcionó URL del repositorio
+    if [ -z "$REPO_URL" ]; then
+        log_error "No se proporcionó URL del repositorio Git"
+        log_error "Por favor, proporciona la URL del repositorio con --repo-url"
+        log_error "Ejemplo: sudo ./ops/install.sh --repo-url https://github.com/tu-usuario/compilatime.git"
         exit 1
     fi
+    
+    # Clonar el repositorio
+    git clone "$REPO_URL" "$PROJECT_DIR"
+    
+    if [ $? -eq 0 ]; then
+        log_success "Proyecto clonado desde Git"
+    else
+        log_error "No se pudo clonar el proyecto desde Git"
+        exit 1
+    fi
+    
+    # Configurar permisos
+    chown -R compilatime:compilatime "$PROJECT_DIR"
 fi
 echo ""
 
