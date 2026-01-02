@@ -459,6 +459,8 @@ Los logs se guardan en `/opt/compilatime/logs/backup_<timestamp>.log`
 
 #### Restaurar Base de Datos
 
+**Opción 1: Usar script de backup**
+
 ```bash
 # Listar backups disponibles
 ./ops/backup.sh list
@@ -467,7 +469,82 @@ Los logs se guardan en `/opt/compilatime/logs/backup_<timestamp>.log`
 ./ops/backup.sh restore /opt/compilatime/backups/db/compilatime_manual_20251229_020000.dump
 ```
 
-**Nota**: El script crea un backup de seguridad antes de restaurar.
+**Opción 2: Usar script de restauración de base de datos (Recomendado)**
+
+El script [`restore-db.sh`](ops/restore-db.sh) está diseñado específicamente para restaurar backups de PostgreSQL con todas las medidas de seguridad necesarias.
+
+```bash
+# Restaurar un backup específico
+sudo ./ops/restore-db.sh /path/to/backup.dump
+
+# Restaurar un backup del directorio de backups
+sudo ./ops/restore-db.sh /opt/compilatime/backups/db/compilatime_v1.0.0_20250101_120000.dump
+```
+
+**Qué hace el script restore-db.sh:**
+
+1. ✅ Verifica que el archivo de backup existe
+2. ✅ Verifica conexión a PostgreSQL
+3. ✅ Hace un backup de seguridad antes de restaurar
+4. ✅ Verifica formato del backup
+5. ✅ Restaura el backup usando pg_restore
+6. ✅ Verifica que la restauración fue exitosa
+7. ✅ Muestra resumen y comandos útiles
+
+**Ventajas de usar restore-db.sh:**
+
+- **Backup de seguridad automático**: Crea un backup antes de restaurar
+- **Verificación de formato**: Verifica que el archivo es un dump válido
+- **Logs detallados**: Guarda logs de la restauración
+- **Comprobación post-restauración**: Verifica que la DB tiene datos
+- **Instrucciones de rollback**: Muestra cómo restaurar el backup de seguridad si algo sale mal
+
+**Ejemplo de salida:**
+
+```
+[INFO] ==========================================
+[INFO] Restauración de Base de Datos de CompilaTime
+[INFO] ==========================================
+[INFO] Fecha: 2025-01-02 21:00:00
+[INFO] Archivo de backup: /opt/compilatime/backups/db/compilatime_v1.0.0_20250101_120000.dump
+[INFO] Host de PostgreSQL: 192.168.10.107:5432
+[INFO] Base de datos: compilatime
+[INFO] Usuario de PostgreSQL: rafa
+[INFO] ==========================================
+
+[INFO] Paso 1: Verificando conexión a PostgreSQL...
+[SUCCESS] Conexión a PostgreSQL exitosa
+
+[INFO] Paso 2: Haciendo backup de seguridad antes de restaurar...
+[INFO] Creando backup de seguridad en: /opt/compilatime/backups/db/compilatime_pre_restore_20250102_210000.dump
+[SUCCESS] Backup de seguridad creado exitosamente
+
+[INFO] Paso 3: Verificando formato del backup...
+[SUCCESS] Formato del backup verificado
+
+[INFO] Paso 4: Restaurando backup...
+[INFO] Este proceso puede tardar varios minutos dependiendo del tamaño del backup
+[INFO] Por favor, espera...
+[SUCCESS] Backup restaurado exitosamente
+
+[INFO] Paso 5: Verificando restauración...
+[SUCCESS] Restauración verificada exitosamente
+[INFO] Número de tablas en la base de datos: 25
+
+[INFO] ==========================================
+[SUCCESS] Restauración de Base de Datos completada exitosamente
+[INFO] ==========================================
+[INFO] Resumen de la restauración:
+[INFO]   - Archivo de backup restaurado: /opt/compilatime/backups/db/compilatime_v1.0.0_20250101_120000.dump
+[INFO]   - Backup de seguridad: /opt/compilatime/backups/db/compilatime_pre_restore_20250102_210000.dump
+[INFO]   - Host de PostgreSQL: 192.168.10.107:5432
+[INFO]   - Base de datos: compilatime
+[INFO]   - Número de tablas: 25
+[INFO]   - Logs de restauración: /var/log/compilatime-restore-db.log
+[INFO] ==========================================
+```
+
+**Nota**: El script crea un backup de seguridad antes de restaurar. Si algo sale mal, puedes restaurar el backup de seguridad usando el comando que se muestra al final del script.
 
 ---
 
