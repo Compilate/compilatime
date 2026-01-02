@@ -407,7 +407,7 @@ echo ""
 log_info "Paso 6: Instalando dependencias del backend..."
 
 cd "$PROJECT_DIR/backend"
-sudo -u compilatime npm ci --production=false
+sudo -u compilatime npm install
 
 log_success "Dependencias del backend instaladas"
 echo ""
@@ -418,7 +418,7 @@ echo ""
 log_info "Paso 7: Instalando dependencias del frontend..."
 
 cd "$PROJECT_DIR/frontend"
-sudo -u compilatime npm ci --production=false
+sudo -u compilatime npm install
 
 log_success "Dependencias del frontend instaladas"
 echo ""
