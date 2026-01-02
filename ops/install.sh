@@ -461,18 +461,25 @@ echo ""
 ################################################################################
 log_info "Paso 10: Configurando PM2..."
 
-# Iniciar backend con PM2
-cd "$PROJECT_DIR/backend"
-sudo -u compilatime pm2 start ecosystem.config.cjs --name compilatime-backend || \
-    sudo -u compilatime pm2 restart compilatime-backend
-
-# Guardar configuración de PM2
-sudo -u compilatime pm2 save
-
-# Configurar PM2 para iniciar en el arranque
-sudo -u compilatime pm2 startup systemd -u compilatime --hp /opt/compilatime --y
-
-log_success "PM2 configurado"
+# Verificar si el backend está compilado
+if [ ! -f "$PROJECT_DIR/backend/dist/server.js" ]; then
+    log_warning "El backend no está compilado (backend/dist/server.js no existe)"
+    log_warning "PM2 no se iniciará. Ejecuta 'npm run build' en el backend primero."
+    log_warning "O ejecuta el script de instalación sin la opción --skip-build"
+else
+    # Iniciar backend con PM2
+    cd "$PROJECT_DIR/backend"
+    sudo -u compilatime pm2 start ecosystem.config.cjs --name compilatime-backend || \
+        sudo -u compilatime pm2 restart compilatime-backend
+    
+    # Guardar configuración de PM2
+    sudo -u compilatime pm2 save
+    
+    # Configurar PM2 para iniciar en el arranque
+    sudo -u compilatime pm2 startup systemd -u compilatime --hp /opt/compilatime --y
+    
+    log_success "PM2 configurado"
+fi
 echo ""
 
 ################################################################################
