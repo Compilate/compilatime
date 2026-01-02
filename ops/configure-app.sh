@@ -284,11 +284,41 @@ echo ""
 log_info "Paso 6: Compilando backend..."
 
 cd "$PROJECT_DIR/backend"
-npm run build
+
+# Verificar que tsconfig.json tiene noEmit=false
+if grep -q '"noEmit": false' "$PROJECT_DIR/backend/tsconfig.json"; then
+    log_success "tsconfig.json tiene noEmit=false"
+else
+    log_error "tsconfig.json no tiene noEmit=false"
+    log_error "Verificando contenido de tsconfig.json:"
+    grep "noEmit" "$PROJECT_DIR/backend/tsconfig.json" || log_warning "No se encontró la opción noEmit"
+    log_error "Por favor, actualiza el repositorio con: git pull origin master"
+    exit 1
+fi
+
+# Compilar backend y capturar errores
+log_info "Ejecutando npm run build..."
+if npm run build 2>&1 | tee /tmp/backend-build.log; then
+    log_success "Compilación completada sin errores"
+else
+    BUILD_EXIT_CODE=${PIPESTATUS[0]}
+    log_error "La compilación falló con código de salida: $BUILD_EXIT_CODE"
+    log_error "Mostrando log de compilación:"
+    cat /tmp/backend-build.log
+    log_error "Por favor, revisa los errores de TypeScript arriba"
+    exit 1
+fi
 
 # Mostrar archivos creados en el directorio dist
 log_info "Archivos creados en el directorio dist:"
-ls -la "$PROJECT_DIR/backend/dist/" || log_warning "No se pudo listar el directorio dist"
+if [ -d "$PROJECT_DIR/backend/dist" ]; then
+    ls -la "$PROJECT_DIR/backend/dist/"
+else
+    log_error "El directorio dist no existe"
+    log_error "Esto puede ser porque TypeScript no generó los archivos JavaScript"
+    log_error "Verifica que tsconfig.json tenga noEmit=false"
+    exit 1
+fi
 
 # Buscar el archivo compilado con diferentes nombres posibles
 BACKEND_FILE=""
