@@ -279,9 +279,9 @@ log_success "Dependencias del frontend instaladas"
 echo ""
 
 ################################################################################
-# 6. Compilar backend
+# 6. Instalar tipos de TypeScript y compilar backend
 ################################################################################
-log_info "Paso 6: Compilando backend..."
+log_info "Paso 6: Instalando tipos de TypeScript y compilando backend..."
 
 cd "$PROJECT_DIR/backend"
 
@@ -300,8 +300,12 @@ else
     exit 1
 fi
 
+# Instalar tipos de TypeScript
+log_info "Instalando tipos de TypeScript..."
+npm install --save-dev @types/node @types/express @types/bcryptjs @types/jsonwebtoken @types/zod @types/nodemailer @types/multer @types/cookie-parser @types/cors @types/helmet @types/express-rate-limit
+
 # Compilar backend y capturar errores
-log_info "Ejecutando npm run build..."
+log_info "Compilando backend..."
 npm run build 2>&1 | tee /tmp/backend-build.log
 BUILD_EXIT_CODE=${PIPESTATUS[0]}
 
