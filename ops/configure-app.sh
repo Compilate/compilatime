@@ -286,6 +286,10 @@ log_info "Paso 6: Compilando backend..."
 cd "$PROJECT_DIR/backend"
 
 # Verificar que tsconfig.json tiene noEmit=false
+log_info "Verificando configuración de TypeScript..."
+log_info "Contenido de tsconfig.json:"
+cat "$PROJECT_DIR/backend/tsconfig.json"
+
 if grep -q '"noEmit": false' "$PROJECT_DIR/backend/tsconfig.json"; then
     log_success "tsconfig.json tiene noEmit=false"
 else
