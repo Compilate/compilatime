@@ -190,7 +190,7 @@ log_info "Paso 3: Instalando PostgreSQL..."
 apt-get install -y postgresql postgresql-contrib
 
 # Verificar instalación de PostgreSQL
-PG_VERSION=$(psql --version)
+PG_VERSION=$(psql --version | awk '{print $3}' | cut -d. -f1)
 log_success "PostgreSQL instalado: $PG_VERSION"
 echo ""
 
