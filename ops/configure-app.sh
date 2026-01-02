@@ -302,7 +302,19 @@ fi
 
 # Instalar tipos de TypeScript
 log_info "Instalando tipos de TypeScript..."
-npm install --save-dev @types/node @types/express @types/bcryptjs @types/jsonwebtoken @types/zod @types/nodemailer @types/multer @types/cookie-parser @types/cors @types/helmet @types/express-rate-limit
+npm install --save-dev @types/node @types/express @types/bcryptjs @types/jsonwebtoken @types/zod @types/nodemailer @types/multer @types/cookie-parser @types/cors @types/helmet @types/express-rate-limit @types/pdfkit @types/exceljs @types/csv-writer @types/redis @types/date-fns @types/crypto-js @types/dotenv
+
+# Verificar que los tipos se instalaron correctamente
+log_info "Verificando que los tipos se instalaron correctamente..."
+if [ -d "$PROJECT_DIR/backend/node_modules/@types" ]; then
+    log_success "Tipos de TypeScript instalados correctamente"
+    log_info "Tipos instalados:"
+    ls "$PROJECT_DIR/backend/node_modules/@types" | head -20
+else
+    log_error "No se encontraron tipos de TypeScript en node_modules/@types"
+    log_error "Verifica que npm install --save-dev se ejecutó correctamente"
+    exit 1
+fi
 
 # Compilar backend y capturar errores
 log_info "Compilando backend..."
