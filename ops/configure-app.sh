@@ -298,10 +298,12 @@ fi
 
 # Compilar backend y capturar errores
 log_info "Ejecutando npm run build..."
-if npm run build 2>&1 | tee /tmp/backend-build.log; then
+npm run build 2>&1 | tee /tmp/backend-build.log
+BUILD_EXIT_CODE=${PIPESTATUS[0]}
+
+if [ $BUILD_EXIT_CODE -eq 0 ]; then
     log_success "Compilación completada sin errores"
 else
-    BUILD_EXIT_CODE=${PIPESTATUS[0]}
     log_error "La compilación falló con código de salida: $BUILD_EXIT_CODE"
     log_error "Mostrando log de compilación:"
     cat /tmp/backend-build.log
