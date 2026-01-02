@@ -62,6 +62,7 @@ Opciones:
   --db-password PASS      Contraseña de la base de datos (default: C0mp1l@te)
   --backend-port PORT      Puerto del backend (default: 4000)
   --frontend-url URL       URL del frontend (default: http://localhost:3000)
+  --repo-url URL           URL del repositorio Git (default: https://github.com/Compilate/compilatime.git)
   --skip-deps            Saltar instalación de dependencias del sistema
   --skip-build            Saltar compilación de backend y frontend
   --dev                  Instalar en modo desarrollo
@@ -79,6 +80,9 @@ Ejemplos:
 
   # Instalación sin compilar
   sudo ./ops/install.sh --skip-build
+
+  # Instalación con repositorio personalizado
+  sudo ./ops/install.sh --repo-url https://github.com/tu-usuario/compilatime.git
 EOF
 }
 
@@ -90,7 +94,7 @@ DB_USER="rafa"
 DB_PASSWORD="C0mp1l@te"
 BACKEND_PORT="4000"
 FRONTEND_URL="http://localhost:3000"
-REPO_URL=""
+REPO_URL="https://github.com/Compilate/compilatime.git"
 SKIP_DEPS=false
 SKIP_BUILD=false
 DEV_MODE=false
@@ -328,14 +332,6 @@ if [ -d "$PROJECT_DIR/.git" ]; then
     fi
 else
     log_info "Clonando proyecto desde Git..."
-    
-    # Verificar si se proporcionó URL del repositorio
-    if [ -z "$REPO_URL" ]; then
-        log_error "No se proporcionó URL del repositorio Git"
-        log_error "Por favor, proporciona la URL del repositorio con --repo-url"
-        log_error "Ejemplo: sudo ./ops/install.sh --repo-url https://github.com/tu-usuario/compilatime.git"
-        exit 1
-    fi
     
     # Clonar el repositorio
     git clone "$REPO_URL" "$PROJECT_DIR"

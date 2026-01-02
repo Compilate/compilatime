@@ -78,33 +78,33 @@ pct enter 101
 
 ## Instalación
 
-### 1. Copiar el Proyecto al Contenedor
+### 1. Preparar el Contenedor
+
+El script de instalación usa `git clone` para descargar el proyecto desde el repositorio Git, por lo que no es necesario copiar los archivos manualmente.
 
 **Desde el host (Proxmox):**
-
-```bash
-# Copiar el proyecto al contenedor
-pct push 101 /ruta/al/proyecto /opt/compilatime
-
-# O usar scp si el contenedor tiene IP estática
-scp -r /ruta/al/proyecto root@IP_DEL_CONTENEDOR:/opt/compilatime
-```
-
-**Desde el contenedor:**
 
 ```bash
 # Entrar al contenedor
 pct enter 101
 
-# Verificar que el proyecto se copió correctamente
-ls -la /opt/compilatime
+# Verificar que el contenedor tiene acceso a Internet
+ping -c 4 google.com
 ```
+
+**Nota:** El script de instalación clonará automáticamente el proyecto desde el repositorio Git durante el proceso de instalación.
 
 ### 2. Ejecutar el Script de Instalación
 
+**Opción A: Instalación desde el repositorio Git (recomendado)**
+
 ```bash
-# Navegar al directorio del proyecto
-cd /opt/compilatime
+# Crear directorio temporal
+mkdir -p /tmp/compilatime-install
+cd /tmp/compilatime-install
+
+# Clonar el repositorio
+git clone https://github.com/Compilate/compilatime.git .
 
 # Dar permisos de ejecución al script
 chmod +x ops/install.sh
@@ -113,10 +113,29 @@ chmod +x ops/install.sh
 sudo ./ops/install.sh
 ```
 
+**Opción B: Instalación desde el repositorio Git con URL personalizada**
+
+```bash
+# Crear directorio temporal
+mkdir -p /tmp/compilatime-install
+cd /tmp/compilatime-install
+
+# Clonar el repositorio con URL personalizada
+git clone https://github.com/tu-usuario/compilatime.git .
+
+# Dar permisos de ejecución al script
+chmod +x ops/install.sh
+
+# Ejecutar el script como root con URL personalizada
+sudo ./ops/install.sh --repo-url https://github.com/tu-usuario/compilatime.git
+```
+
+**Nota:** El script de instalación clonará automáticamente el proyecto desde el repositorio Git en `/opt/compilatime`.
+
 ### 3. Opciones del Script de Instalación
 
 ```bash
-# Instalación básica (base de datos en localhost)
+# Instalación básica (base de datos en localhost, repositorio por defecto)
 sudo ./ops/install.sh
 
 # Instalación con base de datos en otro contenedor
@@ -126,6 +145,12 @@ sudo ./ops/install.sh \
   --db-name compilatime \
   --db-user rafa \
   --db-password C0mp1l@te
+
+# Instalación con repositorio personalizado
+sudo ./ops/install.sh \
+  --repo-url https://github.com/tu-usuario/compilatime.git \
+  --db-host 192.168.1.100 \
+  --db-port 5432
 
 # Instalación en modo desarrollo
 sudo ./ops/install.sh \
@@ -157,6 +182,7 @@ sudo ./ops/install.sh \
 | `--db-password PASS` | Contraseña de la base de datos | `C0mp1l@te` |
 | `--backend-port PORT` | Puerto del backend | `4000` |
 | `--frontend-url URL` | URL del frontend | `http://localhost:3000` |
+| `--repo-url URL` | URL del repositorio Git | `https://github.com/Compilate/compilatime.git` |
 | `--skip-deps` | Saltar instalación de dependencias del sistema | `false` |
 | `--skip-build` | Saltar compilación de backend y frontend | `false` |
 | `--dev` | Instalar en modo desarrollo | `false` |
@@ -185,9 +211,10 @@ El script de instalación realiza los siguientes pasos:
    - Usuario `compilatime` con directorio `/opt/compilatime`
    - Permisos restringidos para seguridad
 
-4. **Clonar o copiar el proyecto**
-   - Copia el proyecto desde el directorio actual
-   - Opcionalmente actualiza si ya existe
+4. **Clonar o actualizar el proyecto con Git**
+    - Clona el proyecto desde el repositorio Git (por defecto: https://github.com/Compilate/compilatime.git)
+    - Opcionalmente actualiza si ya existe
+    - Configura permisos para el usuario `compilatime`
 
 5. **Configurar variables de entorno**
    - Crea `backend/.env` con configuración de base de datos
@@ -433,6 +460,32 @@ cd ../frontend && npm run build
 
 # Reiniciar backend
 pm2 restart compilatime-backend
+```
+
+### Reinstalar desde el Repositorio Git
+
+Si necesitas reinstalar completamente el proyecto desde el repositorio Git:
+
+```bash
+# Detener el backend
+pm2 stop compilatime-backend
+
+# Hacer backup del proyecto actual
+cd /opt
+tar -czf compilatime-backup-$(date +%Y%m%d_%H%M%S).tar.gz compilatime
+
+# Eliminar el proyecto actual
+rm -rf /opt/compilatime
+
+# Crear directorio temporal
+mkdir -p /tmp/compilatime-install
+cd /tmp/compilatime-install
+
+# Clonar el repositorio
+git clone https://github.com/Compilate/compilatime.git .
+
+# Ejecutar el script de instalación
+sudo ./ops/install.sh --db-host 192.168.1.100 --db-port 5432
 ```
 
 ### Usar el Sistema de Despliegue por Versiones
