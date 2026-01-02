@@ -165,7 +165,7 @@ if [[ $TOTAL_MEM -lt 1024 ]]; then
 fi
 
 # Verificar espacio en disco
-DISK_SPACE=$(df -BG /var/lib/postgresql 2>/dev/null | awk 'NR==2 {print $4}' || echo "0")
+DISK_SPACE=$(df -BG /var/lib/postgresql 2>/dev/null | awk 'NR==2 {print $4}' | sed 's/G//' || echo "0")
 log_info "Espacio disponible en disco: ${DISK_SPACE}GB"
 
 if [[ $DISK_SPACE -lt 5 ]]; then
@@ -274,33 +274,15 @@ log_info "Paso 5: Creando usuario y base de datos..."
 
 # Crear usuario y base de datos usando psql
 log_info "Ejecutando comandos SQL para crear usuario y base de datos..."
-su - postgres -c "psql" << EOF
--- Crear usuario
-DO \$\$
-BEGIN;
-    IF NOT EXISTS (SELECT 1 FROM pg_user WHERE usename = '$DB_USER') THEN
-        RAISE NOTICE 'El usuario ya existe';
-    ELSE
-        CREATE USER "$DB_USER" WITH PASSWORD '$DB_PASSWORD';
-    END IF;
-END
-\$;
 
--- Crear base de datos
-DO \$\$
-BEGIN;
-    IF NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '$DB_NAME') THEN
-        RAISE NOTICE 'La base de datos ya existe';
-    ELSE
-        CREATE DATABASE "$DB_NAME" OWNER "$DB_USER";
-    END IF;
-END
-\$;
+# Crear usuario
+su - postgres -c "psql -c \"CREATE USER \\\"$DB_USER\\\" WITH PASSWORD '$DB_PASSWORD';\"" 2>/dev/null || log_info "El usuario '$DB_USER' ya existe"
 
--- Otorgar privilegios
-GRANT ALL PRIVILEGES ON DATABASE "$DB_NAME" TO "$DB_USER";
-\q
-EOF
+# Crear base de datos
+su - postgres -c "psql -c \"CREATE DATABASE \\\"$DB_NAME\\\" OWNER \\\"$DB_USER\\\";\"" 2>/dev/null || log_info "La base de datos '$DB_NAME' ya existe"
+
+# Otorgar privilegios
+su - postgres -c "psql -c \"GRANT ALL PRIVILEGES ON DATABASE \\\"$DB_NAME\\\" TO \\\"$DB_USER\\\";\""
 
 log_success "Usuario '$DB_USER' creado"
 log_success "Base de datos '$DB_NAME' creada"
