@@ -286,14 +286,29 @@ log_info "Paso 6: Compilando backend..."
 cd "$PROJECT_DIR/backend"
 npm run build
 
-# Verificar que el backend se compiló correctamente
-if [ ! -f "$PROJECT_DIR/backend/dist/server.js" ]; then
+# Mostrar archivos creados en el directorio dist
+log_info "Archivos creados en el directorio dist:"
+ls -la "$PROJECT_DIR/backend/dist/" || log_warning "No se pudo listar el directorio dist"
+
+# Buscar el archivo compilado con diferentes nombres posibles
+BACKEND_FILE=""
+if [ -f "$PROJECT_DIR/backend/dist/server.js" ]; then
+    BACKEND_FILE="$PROJECT_DIR/backend/dist/server.js"
+elif [ -f "$PROJECT_DIR/backend/dist/app.js" ]; then
+    BACKEND_FILE="$PROJECT_DIR/backend/dist/app.js"
+elif [ -f "$PROJECT_DIR/backend/dist/index.js" ]; then
+    BACKEND_FILE="$PROJECT_DIR/backend/dist/index.js"
+elif [ -f "$PROJECT_DIR/backend/dist/main.js" ]; then
+    BACKEND_FILE="$PROJECT_DIR/backend/dist/main.js"
+else
     log_error "El backend no se compiló correctamente"
-    log_error "Archivo no encontrado: $PROJECT_DIR/backend/dist/server.js"
+    log_error "No se encontró ningún archivo compilado en $PROJECT_DIR/backend/dist/"
+    log_error "Archivos encontrados:"
+    ls -la "$PROJECT_DIR/backend/dist/" || log_warning "No se pudo listar el directorio dist"
     exit 1
 fi
 
-log_success "Backend compilado correctamente"
+log_success "Backend compilado correctamente: $BACKEND_FILE"
 echo ""
 
 ################################################################################
