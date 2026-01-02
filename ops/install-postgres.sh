@@ -190,7 +190,11 @@ log_info "Paso 3: Instalando PostgreSQL..."
 apt-get install -y postgresql postgresql-contrib
 
 # Verificar instalación de PostgreSQL
-PG_VERSION=$(psql --version | awk '{print $3}' | cut -d. -f1)
+log_info "Detectando versión de PostgreSQL instalada..."
+PSQL_VERSION_OUTPUT=$(psql --version)
+log_info "Salida de psql --version: $PSQL_VERSION_OUTPUT"
+PG_VERSION=$(echo "$PSQL_VERSION_OUTPUT" | awk '{print $3}' | cut -d. -f1)
+log_info "Versión detectada: $PG_VERSION"
 log_success "PostgreSQL instalado: $PG_VERSION"
 echo ""
 
@@ -199,25 +203,48 @@ echo ""
 ################################################################################
 log_info "Paso 4: Configurando PostgreSQL para conexiones remotas..."
 
+# Detectar versión de PostgreSQL instalada
+log_info "Detectando versión de PostgreSQL instalada..."
+PSQL_VERSION_OUTPUT=$(psql --version)
+log_info "Salida de psql --version: $PSQL_VERSION_OUTPUT"
+PG_VERSION=$(echo "$PSQL_VERSION_OUTPUT" | awk '{print $3}' | cut -d. -f1)
+log_info "Versión detectada: $PG_VERSION"
+PG_CONF_DIR="/etc/postgresql/$PG_VERSION/main"
+log_info "Directorio de configuración: $PG_CONF_DIR"
+
+# Verificar que el directorio de configuración existe
+if [ ! -d "$PG_CONF_DIR" ]; then
+    log_error "No se encontró el directorio de configuración: $PG_CONF_DIR"
+    log_info "Buscando directorios de configuración de PostgreSQL..."
+    find /etc/postgresql -name "postgresql.conf" 2>/dev/null | while read file; do
+        log_info "  Encontrado: $file"
+    done
+    exit 1
+fi
+
 # Configurar postgresql.conf
-PG_CONF="/etc/postgresql/15/main/postgresql.conf"
+PG_CONF="$PG_CONF_DIR/postgresql.conf"
 if [ -f "$PG_CONF" ]; then
     # Configurar listen_addresses
     sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" "$PG_CONF"
     sed -i "s/#port = 5432/port = $DB_PORT/" "$PG_CONF"
-    log_success "Configurado $PG_CONF"
+    log_success "Configurado $PG_CONF (versión $PG_VERSION)"
 else
     log_error "No se encontró $PG_CONF"
+    log_info "Buscando archivos postgresql.conf..."
+    find /etc/postgresql -name "postgresql.conf" 2>/dev/null | while read file; do
+        log_info "  Encontrado: $file"
+    done
     exit 1
 fi
 
 # Configurar pg_hba.conf
-PG_HBA="/etc/postgresql/15/main/pg_hba.conf"
+PG_HBA="$PG_CONF_DIR/pg_hba.conf"
 if [ -f "$PG_HBA" ]; then
     # Agregar configuración para conexiones remotas
     if ! grep -q "host    all             all             0.0.0.0/0            md5" "$PG_HBA"; then
         echo "host    all             all             0.0.0.0/0            md5" >> "$PG_HBA"
-        log_success "Configurado $PG_HBA para conexiones remotas"
+        log_success "Configurado $PG_HBA para conexiones remotas (versión $PG_VERSION)"
     else
         log_info "$PG_HBA ya está configurado para conexiones remotas"
     fi
@@ -246,6 +273,7 @@ echo ""
 log_info "Paso 5: Creando usuario y base de datos..."
 
 # Crear usuario y base de datos usando psql
+log_info "Ejecutando comandos SQL para crear usuario y base de datos..."
 su - postgres -c "psql" << EOF
 -- Crear usuario
 DO \$\$
@@ -276,6 +304,14 @@ EOF
 
 log_success "Usuario '$DB_USER' creado"
 log_success "Base de datos '$DB_NAME' creada"
+log_info "Verificando conexión a la base de datos..."
+if PGPASSWORD="$DB_PASSWORD" psql -h localhost -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "SELECT version();" > /dev/null 2>&1; then
+    log_success "Conexión a la base de datos exitosa"
+else
+    log_error "No se pudo conectar a la base de datos"
+    log_error "Verifica la configuración de PostgreSQL"
+    exit 1
+fi
 echo ""
 
 ################################################################################
