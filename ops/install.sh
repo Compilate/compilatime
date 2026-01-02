@@ -316,6 +316,9 @@ echo ""
 ################################################################################
 log_info "Paso 4: Clonando o actualizando el proyecto con Git..."
 
+# Agregar directorio a la lista de directorios seguros de Git
+git config --global --add safe.directory "$PROJECT_DIR"
+
 # Verificar si el directorio ya existe
 if [ -d "$PROJECT_DIR/.git" ]; then
     log_info "El proyecto ya existe en $PROJECT_DIR"
