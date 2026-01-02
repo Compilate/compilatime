@@ -1,0 +1,123 @@
+version: '3.8'
+
+services:
+  # Base de datos PostgreSQL
+  db:
+    image: postgres:15-alpine
+    container_name: compilatime-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: compilatime
+      POSTGRES_USER: rafa
+      POSTGRES_PASSWORD: C0mp1l@te
+    ports:
+      - "5432:5432"
+    volumes:
+      - compilatime-db-data:/var/lib/postgresql/data
+      - ./backups:/var/lib/postgresql/backups
+    networks:
+      - compilatime-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U rafa -d compilatime" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis para caché
+  redis:
+    image: redis:7-alpine
+    container_name: compilatime-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - compilatime-redis-data:/data
+    networks:
+      - compilatime-network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend de la aplicación
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: compilatime-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://rafa:C0mp1l@te@db:5432/compilatime
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      FRONTEND_URL: http://localhost:3000
+      JWT_SECRET: ${JWT_SECRET:-$(openssl rand -hex 32)}
+      JWT_EXPIRES_IN: 7d
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./backend:/app/backend
+      - ./ops:/app/ops
+      - /opt/compilatime/releases:/opt/compilatime/releases
+      - /opt/compilatime/current:/opt/compilatime/current
+      - /opt/compilatime/backups:/opt/compilatime/backups
+      - /opt/compilatime/logs:/opt/compilatime/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - compilatime-network
+    command: sh -c "npm run build && pm2-runtime ecosystem.config.cjs"
+
+  # Frontend de la aplicación
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: compilatime-frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://localhost:4000
+      VITE_APP_NAME: CompilaTime
+    ports:
+      - "3000:80"
+    volumes:
+      - ./frontend:/app/frontend
+    depends_on:
+      - backend
+    networks:
+      - compilatime-network
+    command: sh -c "npm run build && nginx -g daemon off;"
+
+  # Nginx para servir la aplicación
+  nginx:
+    image: nginx:alpine
+    container_name: compilatime-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - compilatime-network
+
+volumes:
+  compilatime-db-data:
+    driver: local
+  compilatime-redis-data:
+    driver: local
+
+networks:
+  compilatime-network:
+    driver: bridge

@@ -1,0 +1,38 @@
+# Dockerfile para el backend de CompilaTime
+FROM node:18-alpine
+
+# Directorio de trabajo
+WORKDIR /app/backend
+
+# Copiar archivos de dependencias
+COPY backend/package*.json ./
+
+# Instalar dependencias
+RUN npm ci --only=production=false
+
+# Copiar archivos del backend
+COPY backend/ ./
+
+# Instalar dependencias globales
+RUN npm install -g pm2 typescript
+
+# Compilar TypeScript
+RUN npm run build
+
+# Crear directorio de releases
+RUN mkdir -p /opt/compilatime/releases
+
+# Crear directorio de logs
+RUN mkdir -p /opt/compilatime/logs
+
+# Crear directorio de backups
+RUN mkdir -p /opt/compilatime/backups
+
+# Crear symlink current
+RUN ln -s /opt/compilatime/releases/current /opt/compilatime/current
+
+# Exponer puerto
+EXPOSE 4000
+
+# Comando de inicio
+CMD ["pm2-runtime", "ecosystem.config.cjs"]
