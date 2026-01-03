@@ -93,9 +93,6 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/absences', absenceRoutes);
 app.use('/api/me', meRoutes);
 app.use('/api/superadmin', superadminRoutes);
-app.use('/admin', superadminRoutes); // Añadir ruta /admin para compatibilidad con frontend
-app.use('/api/admin', superadminRoutes); // Añadir ruta /api/admin para compatibilidad con frontend
-app.use('/api/plans', planRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/auto-punchout', autoPunchoutRoutes);
