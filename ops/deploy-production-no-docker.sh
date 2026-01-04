@@ -38,10 +38,10 @@ echo -e "${YELLOW}📦 Paso 5: Iniciar backend con PM2${NC}"
 cd $PROJECT_DIR
 
 # Iniciar backend (solo si no existe)
-if ! pm2 list | grep -q "backend"; then
-  pm2 start backend/dist/server.js --name backend
+if ! pm2 list | grep -q "compilatime-backend"; then
+  pm2 start backend/dist/server.js --name compilatime-backend
 else
-  pm2 restart backend
+  pm2 restart compilatime-backend
 fi
 
 # Nota: El frontend estático se sirve con Nginx, no necesita PM2
@@ -52,6 +52,6 @@ echo "  - Backend: pm2 status"
 echo "  - Nginx: sudo systemctl status nginx"
 echo ""
 echo "📝 Ver logs:"
-echo "  - Backend: pm2 logs backend"
+echo "  - Backend: pm2 logs compilatime-backend"
 echo "  - Nginx: sudo tail -f /var/log/nginx/access.log"
 echo "  - Nginx error: sudo tail -f /var/log/nginx/error.log"
