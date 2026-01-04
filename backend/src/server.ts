@@ -21,8 +21,12 @@ const startServer = async (): Promise<void> => {
         AutoPunchoutService.startAutoPunchoutCron();
 
         // Iniciar servidor
-        const server = app.listen(env.PORT, () => {
+        // En producción con Docker/Nginx, escuchar en 0.0.0.0
+        const host = config.isProduction ? '0.0.0.0' : '127.0.0.1';
+        const server = app.listen(env.PORT, host, () => {
             console.log(`🚀 Servidor CompilaTime iniciado en el puerto ${env.PORT}`);
+            console.log(`📝 Environment: ${config.isDevelopment ? 'Development' : 'Production'}`);
+            console.log(`🌐 API URL: http://${host}:${env.PORT}`);
             console.log(`📝 Environment: ${config.isDevelopment ? 'Development' : 'Production'}`);
             console.log(`🌐 API URL: http://localhost:${env.PORT}`);
             console.log(`🏥 Health Check: http://localhost:${env.PORT}/health`);

@@ -43,8 +43,14 @@ app.use(helmet({
 }));
 
 // Configurar CORS
+// En desarrollo: usar orígenes específicos desde env
+// En producción: usar * o el dominio real (cuando se usa Nginx proxy, es mismo origen)
+const corsOrigin = config.isDevelopment
+    ? (config.cors.origin ? config.cors.origin.split(',') : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173'])
+    : '*'; // En producción con Nginx proxy, es mismo origen
+
 app.use(cors({
-    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173'], // Añadir todos los orígenes posibles
+    origin: corsOrigin,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
@@ -93,6 +99,9 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/absences', absenceRoutes);
 app.use('/api/me', meRoutes);
 app.use('/api/superadmin', superadminRoutes);
+app.use('/admin', superadminRoutes); // Añadir ruta /admin para compatibilidad con frontend
+app.use('/api/admin', superadminRoutes); // Añadir ruta /api/admin para compatibilidad con frontend
+app.use('/api/plans', planRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/auto-punchout', autoPunchoutRoutes);

@@ -134,13 +134,11 @@ export const getCurrentDomain = (): string | null => {
         }
 
         // En el servidor, usar variables de entorno
-        if (typeof process !== 'undefined' && process.env.NODE_ENV) {
-            const isDevelopment = process.env.NODE_ENV === 'development';
-            if (isDevelopment) {
-                const devDomain = process.env.VITE_DEV_DOMAIN || 'http://localhost:3000';
-                console.log('🔧 Dominio de desarrollo:', devDomain);
-                return devDomain;
-            }
+        if (typeof import.meta !== 'undefined' && import.meta.env.DEV) {
+            // Usar window.location.origin para detectar el dominio actual
+            const devDomain = import.meta.env.VITE_DEV_DOMAIN || 'http://localhost:3000';
+            console.log('🔧 Dominio de desarrollo:', devDomain);
+            return devDomain;
         }
 
         return null;

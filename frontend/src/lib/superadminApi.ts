@@ -276,7 +276,8 @@ class SuperadminApiClient {
     private baseUrl: string;
 
     constructor() {
-        this.baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+        // Usar ruta relativa (funciona tanto en local con Vite proxy como en producción con Nginx)
+        this.baseUrl = import.meta.env.VITE_API_URL || '';
     }
 
     // Obtener el token de superadmin desde las cookies o localStorage

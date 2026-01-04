@@ -1,7 +1,10 @@
 // import { useAuth } from '../contexts/AuthContext';
 
 // Configuración de la API
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+// En local: Vite proxyea /api → backend
+// En producción: Nginx proxyea /api → backend
+// Por eso usamos ruta relativa (sin dominio)
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 // Tipos para las respuestas de la API
 export interface ApiResponse<T = any> {
@@ -699,7 +702,8 @@ export const weeklyScheduleApi = {
     exportWeeklySchedule: (weekStart: string) => {
         // Para exportación, necesitamos usar window.location o crear un link de descarga
         const token = localStorage.getItem('compilatime-auth');
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+        // Usar ruta relativa (funciona tanto en local con Vite proxy como en producción con Nginx)
+        const apiUrl = import.meta.env.VITE_API_URL || '';
 
         return fetch(`${apiUrl}/api/weekly-schedules/export?weekStart=${weekStart}`, {
             method: 'GET',
@@ -768,7 +772,8 @@ export const reportsApi = {
     // Exportación de reportes
     exportReport: (reportType: string, filters: any, format: 'csv' | 'pdf' | 'excel') => {
         const token = localStorage.getItem('compilatime-auth');
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+        // Usar ruta relativa (funciona tanto en local con Vite proxy como en producción con Nginx)
+        const apiUrl = import.meta.env.VITE_API_URL || '';
 
         const params = new URLSearchParams();
         params.append('format', format);

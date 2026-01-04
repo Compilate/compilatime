@@ -108,7 +108,8 @@ const MisRegistrosPage: React.FC = () => {
 
             // Crear URL para exportación
             const token = localStorage.getItem('compilatime-auth');
-            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+            // Usar ruta relativa (funciona tanto en local con Vite proxy como en producción con Nginx)
+            const apiUrl = import.meta.env.VITE_API_URL || '';
 
             const queryString = new URLSearchParams();
             Object.entries(params).forEach(([key, value]) => {
