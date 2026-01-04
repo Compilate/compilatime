@@ -25,12 +25,7 @@ cd $PROJECT_DIR/frontend
 npm install
 npm run build
 
-echo -e "${YELLOW}📦 Paso 3: Actualizar Prisma${NC}"
-cd $PROJECT_DIR/backend
-npm i --save-dev prisma@latest
-npm i @prisma/client@latest
-
-echo -e "${YELLOW}📦 Paso 4: Construir backend${NC}"
+echo -e "${YELLOW}📦 Paso 3: Construir backend${NC}"
 cd $PROJECT_DIR/backend
 npm install
 npm run build
