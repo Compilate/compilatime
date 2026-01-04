@@ -39,7 +39,7 @@ cd $PROJECT_DIR
 
 # Iniciar backend (solo si no existe)
 if ! pm2 list | grep -q "compilatime-backend"; then
-  pm2 start backend/dist/src/server.js --name compilatime-backend
+  pm2 start backend/dist/server.js --name compilatime-backend
 else
   pm2 restart compilatime-backend
 fi
