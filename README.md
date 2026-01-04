@@ -103,13 +103,46 @@ La aplicación estará disponible en:
 - Backend API: http://localhost:4000/api
 - Health Check: http://localhost:4000/health
 
-### Producción con Docker
+### Producción
 
-⚠️ **IMPORTANTE**: En producción NO usar `npm run dev`. Usar Docker Compose.
+⚠️ **IMPORTANTE**: En producción NO usar `npm run dev`. Usar `npm run build` y PM2.
 
-Para instrucciones detalladas de despliegue en producción, consulta: **[Guía de Despliegue en Producción](ops/DEPLOY_PRODUCTION.md)**
+#### Opción 1: SIN Docker (Recomendado)
 
-#### Resumen Rápido
+Para instrucciones detalladas de despliegue sin Docker, consulta: **[Guía de Despliegue en Producción SIN Docker](ops/DEPLOY_PRODUCTION_NO_DOCKER.md)** ⭐
+
+**Resumen Rápido:**
+
+```bash
+# 1. Configurar variables de entorno
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+
+# 2. Editar variables (IMPORTANTE: VITE_API_URL debe estar vacío)
+nano backend/.env
+nano frontend/.env
+
+# 3. Ejecutar script de despliegue
+chmod +x ops/deploy-production-no-docker.sh
+sudo ./ops/deploy-production-no-docker.sh
+```
+
+Este script:
+- Actualiza el código desde git
+- Instala dependencias
+- Construye frontend y backend
+- Ejecuta migraciones de base de datos
+- Reinicia el backend con PM2
+
+**Requisitos:**
+- Node.js 18+, PostgreSQL 15+, Redis 7+, Nginx
+- PM2 instalado globalmente (`npm install -g pm2`)
+
+#### Opción 2: CON Docker
+
+Para instrucciones detalladas de despliegue con Docker, consulta: **[Guía de Despliegue en Producción CON Docker](ops/DEPLOY_PRODUCTION.md)**
+
+**Resumen Rápido:**
 
 ```bash
 # 1. Configurar variables de entorno
@@ -131,49 +164,6 @@ Este script:
 - Construye frontend y backend
 - Ejecuta migraciones de base de datos
 - Reinicia todos los servicios con Docker Compose
-
-#### Configuración Manual
-
-Si prefieres configurar manualmente:
-
-**1. Variables de Entorno**
-
-Crear archivo `.env` en la raíz del proyecto:
-
-```bash
-# JWT Secret (obligatorio, generar uno seguro)
-JWT_SECRET=$(openssl rand -hex 32)
-
-# Base de datos
-POSTGRES_DB=compilatime
-POSTGRES_USER=compilatime_user
-POSTGRES_PASSWORD=tu_contraseña_segura
-
-# Redis
-REDIS_PASSWORD=tu_contraseña_redis
-
-# Dominio
-DOMAIN=tu-dominio.com
-```
-
-**2. Configurar Nginx**
-
-Editar `nginx/nginx.conf`:
-- Cambiar `tu-dominio.com` por tu dominio real
-- Configurar certificados SSL (Let's Encrypt o propios)
-
-**3. Construir y Levantar**
-
-```bash
-# Construir imágenes
-docker-compose build
-
-# Levantar servicios
-docker-compose up -d
-
-# Ver logs
-docker-compose logs -f
-```
 
 ## 📝 Variables de Entorno Importantes
 
@@ -236,7 +226,8 @@ Para que la aplicación funcione igual en local y en remoto sin cambios manuales
 ## 📚 Documentación Adicional
 
 - [Contexto del Proyecto](PROJECT_CONTEXT.md)
-- [🚀 Guía de Despliegue en Producción](ops/DEPLOY_PRODUCTION.md) ⭐ **IMPORTANTE**
+- [🚀 Guía de Despliegue en Producción SIN Docker](ops/DEPLOY_PRODUCTION_NO_DOCKER.md) ⭐ **IMPORTANTE**
+- [🐳 Guía de Despliegue en Producción CON Docker](ops/DEPLOY_PRODUCTION.md)
 - [Documentación de Despliegue](ops/README_DEPLOY.md)
 - [Documentación de Instalación](ops/README_INSTALL.md)
 
