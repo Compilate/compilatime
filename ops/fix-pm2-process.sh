@@ -28,8 +28,8 @@ else
 fi
 
 # Verificar que el archivo compilado existe
-if [ ! -f "backend/dist/server.js" ]; then
-  echo -e "${RED}❌ Error: backend/dist/server.js no existe${NC}"
+if [ ! -f "backend/dist/src/server.js" ]; then
+  echo -e "${RED}❌ Error: backend/dist/src/server.js no existe${NC}"
   echo -e "${YELLOW}📦 Construyendo backend...${NC}"
   cd backend
   npm run build
@@ -39,7 +39,7 @@ fi
 
 # Crear el proceso con la configuración correcta
 echo -e "${YELLOW}📦 Creando proceso PM2 con configuración correcta...${NC}"
-pm2 start backend/dist/server.js --name compilatime-backend
+pm2 start backend/dist/src/server.js --name compilatime-backend
 echo -e "${GREEN}✅ Proceso PM2 creado con éxito${NC}"
 
 # Guardar la configuración de PM2
