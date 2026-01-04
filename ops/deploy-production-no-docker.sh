@@ -34,11 +34,15 @@ echo -e "${YELLOW}📦 Paso 4: Ejecutar migraciones de base de datos${NC}"
 cd $PROJECT_DIR/backend
 npx prisma migrate deploy
 
-echo -e "${YELLOW}📦 Paso 5: Reiniciar servicios con PM2${NC}"
+echo -e "${YELLOW}📦 Paso 5: Iniciar backend con PM2${NC}"
 cd $PROJECT_DIR
 
-# Reiniciar backend
-pm2 restart backend || pm2 start backend/dist/server.js --name backend
+# Iniciar backend (solo si no existe)
+if ! pm2 list | grep -q "backend"; then
+  pm2 start backend/dist/server.js --name backend
+else
+  pm2 restart backend
+fi
 
 # Nota: El frontend estático se sirve con Nginx, no necesita PM2
 echo -e "${GREEN}✅ Despliegue completado exitosamente${NC}"
