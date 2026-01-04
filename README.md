@@ -105,7 +105,38 @@ La aplicación estará disponible en:
 
 ### Producción con Docker
 
-#### 1. Configurar Variables de Entorno
+⚠️ **IMPORTANTE**: En producción NO usar `npm run dev`. Usar Docker Compose.
+
+Para instrucciones detalladas de despliegue en producción, consulta: **[Guía de Despliegue en Producción](ops/DEPLOY_PRODUCTION.md)**
+
+#### Resumen Rápido
+
+```bash
+# 1. Configurar variables de entorno
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+
+# 2. Editar variables (IMPORTANTE: VITE_API_URL debe estar vacío)
+nano backend/.env
+nano frontend/.env
+
+# 3. Ejecutar script de despliegue
+chmod +x ops/deploy-production.sh
+sudo ./ops/deploy-production.sh
+```
+
+Este script:
+- Actualiza el código desde git
+- Instala dependencias
+- Construye frontend y backend
+- Ejecuta migraciones de base de datos
+- Reinicia todos los servicios con Docker Compose
+
+#### Configuración Manual
+
+Si prefieres configurar manualmente:
+
+**1. Variables de Entorno**
 
 Crear archivo `.env` en la raíz del proyecto:
 
@@ -125,13 +156,13 @@ REDIS_PASSWORD=tu_contraseña_redis
 DOMAIN=tu-dominio.com
 ```
 
-#### 2. Configurar Nginx
+**2. Configurar Nginx**
 
 Editar `nginx/nginx.conf`:
 - Cambiar `tu-dominio.com` por tu dominio real
 - Configurar certificados SSL (Let's Encrypt o propios)
 
-#### 3. Construir y Levantar
+**3. Construir y Levantar**
 
 ```bash
 # Construir imágenes
@@ -205,6 +236,7 @@ Para que la aplicación funcione igual en local y en remoto sin cambios manuales
 ## 📚 Documentación Adicional
 
 - [Contexto del Proyecto](PROJECT_CONTEXT.md)
+- [🚀 Guía de Despliegue en Producción](ops/DEPLOY_PRODUCTION.md) ⭐ **IMPORTANTE**
 - [Documentación de Despliegue](ops/README_DEPLOY.md)
 - [Documentación de Instalación](ops/README_INSTALL.md)
 
